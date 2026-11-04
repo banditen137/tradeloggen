@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tradeloggen</title>
+<meta name="description" content="Stockrobbers signaler och dina trades på ett ställe.">
+<meta name="theme-color" content="#1d5fb4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Tradeloggen">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body class="auth">
+
+<!-- Inloggning -->
+<section class="login" id="loginView" hidden>
+  <h1>Tradeloggen</h1>
+  <div class="card">
+    <p>Logga in med din e-post. Du får en länk som loggar in dig direkt.</p>
+    <form id="loginForm" class="inline" autocomplete="on">
+      <label>E-post<input id="loginEmail" type="email" required autocomplete="email" placeholder="namn@exempel.se"></label>
+      <button class="btn primary" type="submit" id="loginBtn">Skicka inloggningslänk</button>
+      <p class="status" id="loginStatus" role="status"></p>
+    </form>
+  </div>
+</section>
+
+<!-- Appen -->
+<div id="appView" hidden>
+  <div class="wrap">
+    <header class="top">
+      <div class="top-row">
+        <h1>Tradeloggen</h1>
+        <div class="who"><span id="whoEmail"></span><button class="linkbtn" id="logoutBtn" type="button">Logga ut</button></div>
+      </div>
+      <div class="stats" aria-label="Sammanfattning">
+        <div class="stat"><b id="sSig">0</b><span>Signaler</span></div>
+        <div class="stat"><b id="sCap">0 kr</b><span>Insatt</span></div>
+        <div class="stat"><b id="sRes">0 kr</b><span>Realiserat</span></div>
+      </div>
+      <p class="status" id="loadStatus" role="status">Hämtar…</p>
+    </header>
+    <main class="list" id="list"></main>
+  </div>
+
+  <nav class="tabbar" aria-label="Filter"><div class="in">
+    <button class="tab" type="button" data-f="Signal" aria-pressed="true"><b id="cSignal">0</b>Signaler</button>
+    <button class="tab" type="button" data-f="Öppen" aria-pressed="false"><b id="cÖppen">0</b>Aktiva</button>
+    <button class="tab" type="button" data-f="Planerad" aria-pressed="false"><b id="cPlanerad">0</b>Planerade</button>
+    <button class="tab" type="button" data-f="Stängd" aria-pressed="false"><b id="cStängd">0</b>Stängda</button>
+  </div></nav>
+  <button class="fab" id="newBtn" type="button" aria-label="Ny trade">+</button>
+
+  <div class="sheet" id="sheet" hidden>
+    <form id="form" autocomplete="off">
+      <div class="grab"></div>
+      <h2>Ny trade</h2>
+      <div class="grid">
+        <label class="full">Aktie<input id="f-aktie" required placeholder="t.ex. Alphabet"></label>
+        <label class="full">TradingView-symbol<input id="f-ticker" placeholder="t.ex. NASDAQ:GOOGL eller OMXSTO:VOLV_B" autocapitalize="characters"></label>
+        <label>Valuta<select id="f-valuta"><option>SEK</option><option>USD</option><option>EUR</option></select></label>
+        <label>Status<select id="f-status"><option>Planerad</option><option value="Öppen">Aktiv (köpt)</option></select></label>
+        <label>Instrument<select id="f-instr"><option>Mini L</option><option>Aktie</option><option>Turbo L</option></select></label>
+        <label>Hävstång (x)<input id="f-lev" inputmode="decimal" placeholder="3"></label>
+        <label>Köpnivå<input id="f-kop" inputmode="decimal" required placeholder="265"></label>
+        <label>Stopp<input id="f-stopp" inputmode="decimal" placeholder="252"></label>
+        <label>Mål 1<input id="f-mal1" inputmode="decimal" placeholder="287"></label>
+        <label>Mål 2<input id="f-mal2" inputmode="decimal" placeholder="315"></label>
+        <label>Certifikatets stopnivå<input id="f-ko" inputmode="decimal" placeholder="240"></label>
+        <label>Insats (kr)<input id="f-insats" inputmode="decimal" placeholder="6500"></label>
+        <label class="full">Anteckning<textarea id="f-note" placeholder="Varför: t.ex. Stockrobber köper i zonen 257–272"></textarea></label>
+      </div>
+      <p class="hint">Certifikatets stopnivå står under certifikatet på Avanza. Den anges i aktiens pris, så samma siffra kan ritas in i TradingView.</p>
+      <p class="status" id="formStatus" role="status"></p>
+      <div class="btns">
+        <button class="btn quiet" type="button" id="cancelBtn">Avbryt</button>
+        <button class="btn primary" type="submit" id="saveBtn">Spara</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="/config.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
