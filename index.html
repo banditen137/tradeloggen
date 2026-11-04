@@ -4,70 +4,92 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Tradeloggen</title>
-<meta name="description" content="Stockrobbers signaler och dina trades på ett ställe.">
-<meta name="theme-color" content="#1d5fb4">
+<meta name="description" content="Stockrobbers köp- och säljsignaler, med tydliga besked om när du ska agera.">
+<meta name="theme-color" content="#09090b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tradeloggen">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="/styles.css?v=1793815977">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/styles.css?v=1793816402">
 </head>
 <body class="auth">
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 16 16"><path d="M2 11.5 6 7.5l2.5 2.5L14 4.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="m11 12 8-8m-3 3 3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
 <!-- Inloggning -->
 <section class="login" id="loginView" hidden>
-  <h1>Tradeloggen</h1>
-  <div class="card">
-    <form id="loginForm" class="inline" autocomplete="on">
-      <label>Användarnamn<input id="loginUser" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="t.ex. edwin"></label>
-      <label>Lösenord<input id="loginPass" type="password" required autocomplete="current-password"></label>
-      <button class="btn primary" type="submit" id="loginBtn">Logga in</button>
-      <p class="status" id="loginStatus" role="status"></p>
-    </form>
-  </div>
+  <div class="brand"><i><svg><use href="#i-logo"/></svg></i>Tradeloggen</div>
+  <form id="loginForm" autocomplete="on">
+    <label>Användarnamn eller e-post<input id="loginUser" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+    <label>Lösenord<input id="loginPass" type="password" required autocomplete="current-password"></label>
+    <button class="btn primary" type="submit" id="loginBtn">Logga in</button>
+    <p class="status" id="loginStatus" role="status"></p>
+  </form>
 </section>
 
 <!-- Appen -->
 <div id="appView" hidden>
   <div class="wrap">
     <header class="top">
-      <div class="top-row">
-        <h1>Tradeloggen</h1>
-        <div class="who"><span id="whoEmail"></span><button class="linkbtn" id="pwBtn" type="button">Byt lösenord</button><button class="linkbtn" id="logoutBtn" type="button">Logga ut</button></div>
+      <div class="bar1">
+        <div class="brand"><i><svg><use href="#i-logo"/></svg></i>Tradeloggen</div>
+        <div class="menu">
+          <button class="icon" id="newBtn" type="button" aria-label="Lägg till egen aktie" title="Lägg till egen aktie"><svg><use href="#i-plus"/></svg></button>
+          <button class="icon" id="pwBtn" type="button" aria-label="Byt lösenord" title="Byt lösenord"><svg><use href="#i-key"/></svg></button>
+          <button class="icon" id="logoutBtn" type="button" aria-label="Logga ut" title="Logga ut"><svg><use href="#i-out"/></svg></button>
+        </div>
       </div>
-      <section class="hero" aria-label="Portfölj">
-        <div class="hero-main">
-          <span class="eyebrow">Aktiva trades · sedan köp</span>
-          <b class="hero-num" id="hPl">0 kr</b>
-          <span class="hero-sub" id="hPlPct">Inga aktiva trades än</span>
-        </div>
-        <div class="hero-grid">
-          <div><span>Insatt</span><b id="hCap">0 kr</b></div>
-          <div><span>Idag</span><b id="hDay">–</b></div>
-          <div><span>Realiserat</span><b id="hRes">0 kr</b></div>
-          <div><span>Träffsäkerhet</span><b id="hHit">–</b></div>
-        </div>
-        <div class="markets" id="markets"></div>
-      </section>
-      <p class="status" id="loadStatus" role="status">Hämtar…</p>
+      <p class="headline" id="headline">Hämtar…</p>
+      <div class="pulse" id="markets"></div>
     </header>
+
+    <nav class="tabs" aria-label="Vy">
+      <button class="tab" type="button" data-f="sig" aria-pressed="true">Signaler <span class="c" id="cSig">0</span></button>
+      <button class="tab" type="button" data-f="pos" aria-pressed="false">Mina aktier <span class="c" id="cPos">0</span></button>
+      <button class="tab" type="button" data-f="his" aria-pressed="false">Historik <span class="c" id="cHis">0</span></button>
+    </nav>
+
     <main class="list" id="list"></main>
     <p class="updated" id="updated"></p>
   </div>
 
-  <nav class="tabbar" aria-label="Filter"><div class="in">
-    <button class="tab" type="button" data-f="Signal" aria-pressed="true"><b id="cSignal">0</b>Signaler</button>
-    <button class="tab" type="button" data-f="Öppen" aria-pressed="false"><b id="cÖppen">0</b>Aktiva</button>
-    <button class="tab" type="button" data-f="Planerad" aria-pressed="false"><b id="cPlanerad">0</b>Planerade</button>
-    <button class="tab" type="button" data-f="Stängd" aria-pressed="false"><b id="cStängd">0</b>Stängda</button>
-  </div></nav>
-  <button class="fab" id="newBtn" type="button" aria-label="Ny trade">+</button>
+  <!-- Jag köpte -->
+  <div class="sheet" id="buySheet" hidden>
+    <form id="buyForm" autocomplete="off">
+      <div class="grab"></div>
+      <h2 id="buyTitle">Jag köpte</h2>
+      <div class="grid" id="manualFields">
+        <label class="full">Aktie<input id="b-aktie" placeholder="t.ex. Volvo B"></label>
+        <label class="full">TradingView-symbol<input id="b-ticker" placeholder="t.ex. OMXSTO:VOLV_B eller NASDAQ:GOOGL" autocapitalize="characters"></label>
+        <label>Stopp<input id="b-stopp" inputmode="decimal"></label>
+        <label>Mål<input id="b-mal1" inputmode="decimal"></label>
+      </div>
+      <div class="grid">
+        <label>Köpkurs (aktien)<input id="b-kop" inputmode="decimal" required></label>
+        <label>Instrument<select id="b-instr"><option>Aktie</option><option>Mini L</option><option>Turbo L</option></select></label>
+        <label>Hävstång (x)<input id="b-lev" inputmode="decimal" placeholder="1"></label>
+        <label>Cert. stopnivå<input id="b-ko" inputmode="decimal"></label>
+      </div>
+      <p class="hint" id="buyHint">Certifikatets stopnivå står på Avanza och anges i aktiens pris.</p>
+      <p class="status" id="buyStatus" role="status"></p>
+      <div class="btns">
+        <button class="btn ghost" type="button" id="buyCancel">Avbryt</button>
+        <button class="btn primary" type="submit" id="buySave">Spara</button>
+      </div>
+    </form>
+  </div>
 
+  <!-- Byt lösenord -->
   <div class="sheet" id="pwSheet" hidden>
     <form id="pwForm" autocomplete="off">
       <div class="grab"></div>
@@ -76,43 +98,15 @@
       <label>Upprepa<input id="pwNew2" type="password" required minlength="8" autocomplete="new-password"></label>
       <p class="status" id="pwStatus" role="status"></p>
       <div class="btns">
-        <button class="btn quiet" type="button" id="pwCancel">Avbryt</button>
+        <button class="btn ghost" type="button" id="pwCancel">Avbryt</button>
         <button class="btn primary" type="submit" id="pwSave">Spara</button>
-      </div>
-    </form>
-  </div>
-
-  <div class="sheet" id="sheet" hidden>
-    <form id="form" autocomplete="off">
-      <div class="grab"></div>
-      <h2>Ny trade</h2>
-      <div class="grid">
-        <label class="full">Aktie<input id="f-aktie" required placeholder="t.ex. Alphabet"></label>
-        <label class="full">TradingView-symbol<input id="f-ticker" placeholder="t.ex. NASDAQ:GOOGL eller OMXSTO:VOLV_B" autocapitalize="characters"></label>
-        <label>Valuta<select id="f-valuta"><option>SEK</option><option>USD</option><option>EUR</option></select></label>
-        <label>Status<select id="f-status"><option>Planerad</option><option value="Öppen">Aktiv (köpt)</option></select></label>
-        <label>Instrument<select id="f-instr"><option>Mini L</option><option>Aktie</option><option>Turbo L</option></select></label>
-        <label>Hävstång (x)<input id="f-lev" inputmode="decimal" placeholder="3"></label>
-        <label>Köpnivå<input id="f-kop" inputmode="decimal" required placeholder="265"></label>
-        <label>Stopp<input id="f-stopp" inputmode="decimal" placeholder="252"></label>
-        <label>Mål 1<input id="f-mal1" inputmode="decimal" placeholder="287"></label>
-        <label>Mål 2<input id="f-mal2" inputmode="decimal" placeholder="315"></label>
-        <label>Certifikatets stopnivå<input id="f-ko" inputmode="decimal" placeholder="240"></label>
-        <label>Insats (kr)<input id="f-insats" inputmode="decimal" placeholder="6500"></label>
-        <label class="full">Anteckning<textarea id="f-note" placeholder="Varför: t.ex. Stockrobber köper i zonen 257–272"></textarea></label>
-      </div>
-      <p class="hint">Certifikatets stopnivå står under certifikatet på Avanza. Den anges i aktiens pris, så samma siffra kan ritas in i TradingView.</p>
-      <p class="status" id="formStatus" role="status"></p>
-      <div class="btns">
-        <button class="btn quiet" type="button" id="cancelBtn">Avbryt</button>
-        <button class="btn primary" type="submit" id="saveBtn">Spara</button>
       </div>
     </form>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="/config.js?v=1793815977"></script>
-<script src="/app.js?v=1793815977"></script>
+<script src="/config.js?v=1793816402"></script>
+<script src="/app.js?v=1793816402"></script>
 </body>
 </html>
