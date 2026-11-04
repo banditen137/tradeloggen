@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="/styles.css?v=1793816402">
+<link rel="stylesheet" href="/styles.css?v=1793816908">
 </head>
 <body class="auth">
 
@@ -23,6 +23,7 @@
   <symbol id="i-logo" viewBox="0 0 16 16"><path d="M2 11.5 6 7.5l2.5 2.5L14 4.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="m11 12 8-8m-3 3 3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2Zm4 4a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
   <symbol id="i-out" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 
@@ -45,12 +46,14 @@
         <div class="brand"><i><svg><use href="#i-logo"/></svg></i>Tradeloggen</div>
         <div class="menu">
           <button class="icon" id="newBtn" type="button" aria-label="Lägg till egen aktie" title="Lägg till egen aktie"><svg><use href="#i-plus"/></svg></button>
+          <button class="icon" id="bellBtn" type="button" aria-label="Notiser" title="Notiser"><svg><use href="#i-bell"/></svg></button>
           <button class="icon" id="pwBtn" type="button" aria-label="Byt lösenord" title="Byt lösenord"><svg><use href="#i-key"/></svg></button>
           <button class="icon" id="logoutBtn" type="button" aria-label="Logga ut" title="Logga ut"><svg><use href="#i-out"/></svg></button>
         </div>
       </div>
       <p class="headline" id="headline">Hämtar…</p>
       <div class="pulse" id="markets"></div>
+      <div class="note blue" id="pushTip" hidden></div>
     </header>
 
     <nav class="tabs" aria-label="Vy">
@@ -89,6 +92,21 @@
     </form>
   </div>
 
+  <!-- Notiser -->
+  <div class="sheet" id="pushSheet" hidden>
+    <form id="pushForm" autocomplete="off">
+      <div class="grab"></div>
+      <h2>Notiser</h2>
+      <p class="hint" id="pushText"></p>
+      <p class="status" id="pushStatus" role="status"></p>
+      <div class="btns">
+        <button class="btn ghost" type="button" id="pushClose">Stäng</button>
+        <button class="btn primary" type="submit" id="pushOn">Slå på notiser</button>
+        <button class="btn wide" type="button" id="pushTest" hidden>Skicka en testnotis</button>
+      </div>
+    </form>
+  </div>
+
   <!-- Byt lösenord -->
   <div class="sheet" id="pwSheet" hidden>
     <form id="pwForm" autocomplete="off">
@@ -106,7 +124,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="/config.js?v=1793816402"></script>
-<script src="/app.js?v=1793816402"></script>
+<script src="/config.js?v=1793816908"></script>
+<script src="/app.js?v=1793816908"></script>
 </body>
 </html>

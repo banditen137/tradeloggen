@@ -24,7 +24,7 @@
   const DOMAIN = "@tradeloggen.app";
   const toEmail = u => { u = u.trim().toLowerCase(); return u.includes("@") ? u : u + DOMAIN; };
   function showLogin() { $("#appView").hidden = true; $("#loginView").hidden = false; document.body.classList.add("auth"); }
-  function showApp() { $("#loginView").hidden = true; $("#appView").hidden = false; document.body.classList.remove("auth"); }
+  function showApp() { $("#loginView").hidden = true; $("#appView").hidden = false; document.body.classList.remove("auth"); setTimeout(() => refreshPushTip(), 0); }
 
   $("#loginForm").addEventListener("submit", async e => {
     e.preventDefault();
@@ -355,6 +355,69 @@
     closeBuy(); view = "pos"; openKey = null; load();
   });
 
+  // ---------- Notiser ----------
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  const b64 = s => { const r = atob((s + "=".repeat((4 - s.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(r, c => c.charCodeAt(0)); };
+  async function pushState() {
+    if (isIOS && !standalone()) return "install";
+    if (!pushSupported()) return "unsupported";
+    if (Notification.permission === "denied") return "denied";
+    try { const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); return sub && Notification.permission === "granted" ? "on" : "off"; }
+    catch (e) { return "off"; }
+  }
+  async function refreshPushTip() {
+    const st = await pushState(), tip = $("#pushTip");
+    tip.hidden = !(st === "off" || st === "install");
+    tip.innerHTML = st === "install"
+      ? "📲 Lägg till appen på hemskärmen för att få notiser: tryck på <b>Dela</b> och sedan <b>Lägg till på hemskärmen</b>."
+      : '🔔 <button class="linkbtn" type="button" id="tipOn" style="color:inherit;text-decoration:underline">Slå på notiser</button> så säger appen till när det är dags att köpa eller sälja.';
+    const b = $("#tipOn"); if (b) b.addEventListener("click", openPush);
+    $("#bellBtn").style.color = st === "on" ? "var(--blue)" : "";
+  }
+  const pushSheet = $("#pushSheet");
+  async function openPush() {
+    const st = await pushState();
+    const txt = {
+      install: "På iPhone fungerar notiser bara när appen ligger på hemskärmen. Öppna sidan i Safari, tryck på Dela och välj Lägg till på hemskärmen. Öppna sedan appen därifrån och tryck på klockan igen.",
+      unsupported: "Den här webbläsaren stödjer inte notiser. Prova Chrome på Android eller Safari på iPhone (med appen på hemskärmen).",
+      denied: "Notiser är blockerade för appen. Tillåt dem i telefonens inställningar för webbläsaren eller appen, och försök igen.",
+      off: "Du får en notis när Stockrobber går ut med ett köp eller sälj, när en signal når köpläge och när en av dina aktier når mål, stopp eller närmar sig knock-out.",
+      on: "Notiser är påslagna på den här enheten. Du får besked om nya signaler, köplägen och när dina aktier når mål eller stopp."
+    }[st];
+    $("#pushText").textContent = txt; $("#pushStatus").textContent = "";
+    $("#pushOn").hidden = st !== "off"; $("#pushTest").hidden = st !== "on";
+    pushSheet.hidden = false; document.body.classList.add("locked");
+  }
+  const closePush = () => { pushSheet.hidden = true; document.body.classList.remove("locked"); refreshPushTip(); };
+  $("#bellBtn").addEventListener("click", openPush);
+  $("#pushClose").addEventListener("click", closePush);
+  pushSheet.addEventListener("click", e => { if (e.target === pushSheet) closePush(); });
+  $("#pushForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    $("#pushOn").disabled = true; $("#pushStatus").textContent = "Slår på…";
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { $("#pushStatus").textContent = "Du tackade nej till notiser. Tillåt dem i inställningarna och försök igen."; $("#pushOn").disabled = false; return; }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(cfg.vapidPublicKey) });
+      const j = sub.toJSON();
+      const { error } = await sb.from("push_subscriptions").upsert({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }, { onConflict: "endpoint" });
+      if (error) throw error;
+      await sb.rpc("request_test_push");
+      $("#pushStatus").className = "status ok"; $("#pushStatus").textContent = "Klart! En testnotis är på väg.";
+      $("#pushOn").hidden = true; $("#pushTest").hidden = false;
+    } catch (err) { $("#pushStatus").textContent = "Kunde inte slå på notiser. Försök igen."; }
+    $("#pushOn").disabled = false; refreshPushTip();
+  });
+  $("#pushTest").addEventListener("click", async () => {
+    $("#pushStatus").className = "status"; $("#pushStatus").textContent = "Skickar…";
+    const { error } = await sb.rpc("request_test_push");
+    $("#pushStatus").className = error ? "status" : "status ok"; $("#pushStatus").textContent = error ? "Kunde inte skicka. Försök igen." : "Testnotis skickad.";
+  });
+
   // Byt lösenord
   const pwSheet = $("#pwSheet"), pwForm = $("#pwForm");
   const closePw = () => { pwSheet.hidden = true; document.body.classList.remove("locked"); pwForm.reset(); $("#pwStatus").textContent = ""; $("#pwStatus").className = "status"; };
@@ -370,6 +433,6 @@
     if (error) { $("#pwStatus").textContent = "Kunde inte byta lösenord. Välj minst 8 tecken."; return; }
     $("#pwStatus").className = "status ok"; $("#pwStatus").textContent = "Lösenordet är bytt."; setTimeout(closePw, 1200);
   });
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { if (!buySheet.hidden) closeBuy(); if (!pwSheet.hidden) closePw(); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { if (!buySheet.hidden) closeBuy(); if (!pwSheet.hidden) closePw(); if (!pushSheet.hidden) closePush(); } });
   setInterval(() => { if (user) render(true); }, 60000);
 })();
