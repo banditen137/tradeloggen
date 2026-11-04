@@ -40,14 +40,24 @@
         <h1>Tradeloggen</h1>
         <div class="who"><span id="whoEmail"></span><button class="linkbtn" id="pwBtn" type="button">Byt lösenord</button><button class="linkbtn" id="logoutBtn" type="button">Logga ut</button></div>
       </div>
-      <div class="stats" aria-label="Sammanfattning">
-        <div class="stat"><b id="sSig">0</b><span>Signaler</span></div>
-        <div class="stat"><b id="sCap">0 kr</b><span>Insatt</span></div>
-        <div class="stat"><b id="sRes">0 kr</b><span>Realiserat</span></div>
-      </div>
+      <section class="hero" aria-label="Portfölj">
+        <div class="hero-main">
+          <span class="eyebrow">Aktiva trades · sedan köp</span>
+          <b class="hero-num" id="hPl">0 kr</b>
+          <span class="hero-sub" id="hPlPct">Inga aktiva trades än</span>
+        </div>
+        <div class="hero-grid">
+          <div><span>Insatt</span><b id="hCap">0 kr</b></div>
+          <div><span>Idag</span><b id="hDay">–</b></div>
+          <div><span>Realiserat</span><b id="hRes">0 kr</b></div>
+          <div><span>Träffsäkerhet</span><b id="hHit">–</b></div>
+        </div>
+        <div class="markets" id="markets"></div>
+      </section>
       <p class="status" id="loadStatus" role="status">Hämtar…</p>
     </header>
     <main class="list" id="list"></main>
+    <p class="updated" id="updated"></p>
   </div>
 
   <nav class="tabbar" aria-label="Filter"><div class="in">
