@@ -15,7 +15,7 @@ Stockrobbers köpsignaler och egna trades på ett ställe. En vanlig webbsida so
 | `supabase/seed.sql` | Signalerna som fanns i Claude-versionen |
 
 ## Driftsättning
-1. Supabase: kör `schema.sql` och `seed.sql`. Stäng av öppen registrering (Authentication → Sign In / Providers → "Allow new users to sign up" av) och bjud in användare under Authentication → Users → Invite.
+1. Supabase: kör `schema.sql` och `seed.sql`. Stäng av öppen registrering. Skapa användare under Authentication → Users → Add user → Create new user med e-post `användarnamn@tradeloggen.app`, ett lösenord och "Auto Confirm User" ikryssat. Man loggar sedan in med bara användarnamnet.
 2. Sätt Site URL och Redirect URL i Supabase (Authentication → URL Configuration) till appens adress.
 3. Fyll i `config.js`.
 4. Vercel: importera repot, inga byggsteg (Framework: Other). Lägg till domänen under Settings → Domains.

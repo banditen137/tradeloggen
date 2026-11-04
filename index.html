@@ -23,10 +23,10 @@
 <section class="login" id="loginView" hidden>
   <h1>Tradeloggen</h1>
   <div class="card">
-    <p>Logga in med din e-post. Du får en länk som loggar in dig direkt.</p>
     <form id="loginForm" class="inline" autocomplete="on">
-      <label>E-post<input id="loginEmail" type="email" required autocomplete="email" placeholder="namn@exempel.se"></label>
-      <button class="btn primary" type="submit" id="loginBtn">Skicka inloggningslänk</button>
+      <label>Användarnamn<input id="loginUser" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="t.ex. edwin"></label>
+      <label>Lösenord<input id="loginPass" type="password" required autocomplete="current-password"></label>
+      <button class="btn primary" type="submit" id="loginBtn">Logga in</button>
       <p class="status" id="loginStatus" role="status"></p>
     </form>
   </div>
@@ -38,7 +38,7 @@
     <header class="top">
       <div class="top-row">
         <h1>Tradeloggen</h1>
-        <div class="who"><span id="whoEmail"></span><button class="linkbtn" id="logoutBtn" type="button">Logga ut</button></div>
+        <div class="who"><span id="whoEmail"></span><button class="linkbtn" id="pwBtn" type="button">Byt lösenord</button><button class="linkbtn" id="logoutBtn" type="button">Logga ut</button></div>
       </div>
       <div class="stats" aria-label="Sammanfattning">
         <div class="stat"><b id="sSig">0</b><span>Signaler</span></div>
@@ -57,6 +57,20 @@
     <button class="tab" type="button" data-f="Stängd" aria-pressed="false"><b id="cStängd">0</b>Stängda</button>
   </div></nav>
   <button class="fab" id="newBtn" type="button" aria-label="Ny trade">+</button>
+
+  <div class="sheet" id="pwSheet" hidden>
+    <form id="pwForm" autocomplete="off">
+      <div class="grab"></div>
+      <h2>Byt lösenord</h2>
+      <label>Nytt lösenord (minst 8 tecken)<input id="pwNew" type="password" required minlength="8" autocomplete="new-password"></label>
+      <label>Upprepa<input id="pwNew2" type="password" required minlength="8" autocomplete="new-password"></label>
+      <p class="status" id="pwStatus" role="status"></p>
+      <div class="btns">
+        <button class="btn quiet" type="button" id="pwCancel">Avbryt</button>
+        <button class="btn primary" type="submit" id="pwSave">Spara</button>
+      </div>
+    </form>
+  </div>
 
   <div class="sheet" id="sheet" hidden>
     <form id="form" autocomplete="off">

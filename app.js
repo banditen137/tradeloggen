@@ -26,24 +26,45 @@
   }
   function showApp() {
     $("#loginView").hidden = true; $("#appView").hidden = false; document.body.classList.remove("auth");
-    $("#whoEmail").textContent = user.email || "";
+    $("#whoEmail").textContent = userName(user.email);
   }
+  // Användarnamnet "edwin" blir kontot edwin@tradeloggen.app i Supabase. Inga mejl skickas dit.
+  const DOMAIN = "@tradeloggen.app";
+  const toEmail = u => { u = u.trim().toLowerCase(); return u.includes("@") ? u : u + DOMAIN; };
+  const userName = e => (e || "").endsWith(DOMAIN) ? e.slice(0, -DOMAIN.length) : (e || "");
+
   $("#loginForm").addEventListener("submit", async e => {
     e.preventDefault();
-    const email = $("#loginEmail").value.trim();
-    $("#loginBtn").disabled = true; $("#loginStatus").className = "status"; $("#loginStatus").textContent = "Skickar…";
-    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin, shouldCreateUser: false } });
+    const u = $("#loginUser").value, p = $("#loginPass").value;
+    $("#loginBtn").disabled = true; $("#loginStatus").className = "status"; $("#loginStatus").textContent = "Loggar in…";
+    const { error } = await sb.auth.signInWithPassword({ email: toEmail(u), password: p });
     $("#loginBtn").disabled = false;
     if (error) {
-      $("#loginStatus").textContent = /not allowed|signups|not found/i.test(error.message)
-        ? "Den adressen har inget konto. Be Edwin bjuda in dig."
-        : "Kunde inte skicka länken. Försök igen om en stund.";
+      $("#loginStatus").textContent = /invalid/i.test(error.message)
+        ? "Fel användarnamn eller lösenord."
+        : "Kunde inte logga in just nu. Försök igen om en stund.";
     } else {
-      $("#loginStatus").className = "status ok";
-      $("#loginStatus").textContent = "Klart! Öppna mejlet och tryck på länken. Öppna den på samma enhet som appen.";
+      $("#loginStatus").textContent = ""; $("#loginPass").value = "";
     }
   });
   $("#logoutBtn").addEventListener("click", async () => { await sb.auth.signOut(); });
+
+  const pwSheet = $("#pwSheet"), pwForm = $("#pwForm");
+  const closePw = () => { pwSheet.hidden = true; document.body.classList.remove("locked"); pwForm.reset(); $("#pwStatus").textContent = ""; };
+  $("#pwBtn").addEventListener("click", () => { pwSheet.hidden = false; document.body.classList.add("locked"); setTimeout(() => $("#pwNew").focus(), 50); });
+  $("#pwCancel").addEventListener("click", closePw);
+  pwSheet.addEventListener("click", e => { if (e.target === pwSheet) closePw(); });
+  pwForm.addEventListener("submit", async e => {
+    e.preventDefault();
+    const a = $("#pwNew").value, b = $("#pwNew2").value;
+    if (a !== b) { $("#pwStatus").textContent = "Lösenorden är inte lika."; return; }
+    $("#pwSave").disabled = true; $("#pwStatus").textContent = "Sparar…";
+    const { error } = await sb.auth.updateUser({ password: a });
+    $("#pwSave").disabled = false;
+    if (error) { $("#pwStatus").textContent = /weak|short|length/i.test(error.message) ? "Lösenordet är för svagt. Välj minst 8 tecken." : "Kunde inte byta lösenord. Försök igen."; return; }
+    $("#pwStatus").className = "status ok"; $("#pwStatus").textContent = "Lösenordet är bytt.";
+    setTimeout(closePw, 1200);
+  });
 
   sb.auth.onAuthStateChange((_evt, session) => {
     const next = session ? session.user : null;
