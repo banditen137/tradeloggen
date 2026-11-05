@@ -78,7 +78,7 @@
   const price = t => { const x = q(t); return x && typeof x.price === "number" ? x.price : num(t.kurs); };
   const today = t => { const x = q(t); return x && x.prev ? (x.price - x.prev) / x.prev * 100 : null; };
   async function fetchQuotes() {
-    const syms = Array.from(new Set(signals.concat(trades.filter(t => t.status !== "Stängd")).map(t => ySym(t.ticker)).filter(Boolean).concat(["^OMX", "^NDX"])));
+    const syms = Array.from(new Set(signals.concat(trades.filter(t => t.status !== "Stängd")).map(t => ySym(t.ticker)).filter(Boolean)));
     if (!syms.length) return;
     try {
       const r = await fetch("/api/quote?symbols=" + encodeURIComponent(syms.join(",")));
@@ -128,42 +128,34 @@
     "väntar": { t: "Väntar själv", ok: false }
   };
   const MAX_RISK = 7, MAX_AGE = 7;
-  const mktSym = s => (s.valuta || "SEK") === "SEK" ? "^OMX" : "^NDX";
   function checks(s, p, z) {
     const sr = SR[s.sr_lage] || { t: "Okänt besked", ok: false };
-    const qq = q(s), mk = quotes[mktSym(s)];
     const age = (Date.now() - ts(s.analys_datum || s.skapad)) / 864e5;
     const rd = s.rapport_datum ? (ts(s.rapport_datum + "T12:00:00Z") - Date.now()) / 864e5 : null;
-    const risk = z && z.stopp && p ? (p - z.stopp) / p * 100 : null;
-    const trendOk = qq && qq.sma50 ? p > qq.sma50 : null;
-    const mkOk = mk && mk.sma50 ? mk.price > mk.sma50 : null;
     return [
       { k: "sr", ok: sr.ok, t: "Stockrobber: " + sr.t },
       { k: "zon", ok: z ? z.d <= ZON_BRA : false, t: z ? (z.d <= ZON_BRA ? "I köpzonen " + fmt(z.ref) + "–" + fmt(z.top) : apct(z.d) + " över stödet " + fmt(z.ref)) : "Inga nivåer" },
-      { k: "trend", ok: trendOk, t: trendOk == null ? "Trend: hämtar data" : "Aktien " + (trendOk ? "över" : "under") + " sitt 50-dagarssnitt (" + fmt(qq.sma50) + ")" },
-      { k: "mkt", ok: mkOk, t: mkOk == null ? "Marknaden: hämtar data" : (mktSym(s) === "^OMX" ? "OMXS30" : "Nasdaq 100") + " " + (mkOk ? "över" : "under") + " sitt 50-dagarssnitt" },
       { k: "rapport", ok: rd == null || rd < -1 || rd > 3, t: rd != null && rd >= -1 && rd <= 3 ? "Rapport " + date(s.rapport_datum) + ", vänta till efter" : "Ingen rapport de närmaste dagarna" },
-      { k: "färsk", ok: age <= MAX_AGE, t: "Analysen är " + (age < 1 ? "från idag" : Math.floor(age) + " d gammal") },
-      { k: "risk", ok: risk != null && risk <= MAX_RISK, t: risk != null ? "Risk till stopp " + fmt(risk, 1) + " %" : "Risk: okänd" }
+      { k: "färsk", ok: age <= MAX_AGE, t: "Analysen är " + (age < 1 ? "från idag" : Math.floor(age) + " d gammal") }
     ];
   }
   function buyVerdict(s) {
     const p = price(s), stopp = num(s.stopp);
     if (p == null || num(s.kop) == null) return { cls: "b-wait", label: "Bevaka", text: "Väntar på kurs", rank: 3 };
     if (stopp != null && p < stopp) return { cls: "b-stop", label: "Under stopp", text: "Stödet är brutet. Vänta på ny analys från Stockrobber.", rank: 5 };
-    // Stockrobber bestämmer, kontrollerna graderar. Tre spärrar ger alltid "Vänta".
-    const z = zone(s, p), c = checks(s, p, z), score = c.filter(x => x.ok === true).length;
-    const fail = c.filter(x => x.ok !== true && x.k !== "sr" && x.k !== "zon");
+    // Stockrobbers analys bestämmer. Kontrollerna (hans besked, köpzon, färsk analys, rapport – senare nyheter) graderar.
+    const z = zone(s, p), c = checks(s, p, z), n = c.length, score = c.filter(x => x.ok === true).length;
     const base = { z, c, score };
-    const why = fail.length ? " · " + fail.map(x => x.t).join(" · ") : "";
+    const tag = score + "/" + n;
     if (s.sr_lage === "väntar") return Object.assign(base, { cls: "b-wait", label: "Vänta", text: s.rapport || "Stockrobber väntar själv", rank: 4 });
     const rep = c.find(x => x.k === "rapport");
     if (rep && rep.ok === false) return Object.assign(base, { cls: "b-wait", label: "Vänta", text: rep.t, rank: 3 });
     if (z.d > ZON_OK) return Object.assign(base, { cls: "b-wait", label: "Vänta på rekyl", text: "Bra läge runt " + fmt(z.ref) + "–" + fmt(z.top), rank: 2 });
-    const strong = SR[s.sr_lage] && SR[s.sr_lage].ok;
-    if (strong && z.d <= ZON_BRA && score >= 6) return Object.assign(base, { cls: "b-buy", label: "Bra köpläge", text: score + "/7" + (z.broken ? " · över utbrottet " + fmt(z.ref) : " · nära stödet " + fmt(z.ref)) + why, rank: 0, hot: true });
-    if (score >= 5) return Object.assign(base, { cls: "b-ok", label: "Helt okej köpläge", text: score + "/7" + why, rank: 1 });
-    return Object.assign(base, { cls: "b-wait", label: "Vänta", text: score + "/7" + why, rank: 2 });
+    const strong = SR[s.sr_lage] && SR[s.sr_lage].ok, fresh = c.find(x => x.k === "färsk").ok;
+    if (strong && z.d <= ZON_BRA && fresh) return Object.assign(base, { cls: "b-buy", label: "Bra köpläge", text: tag + (z.broken ? " · över utbrottet " + fmt(z.ref) : " · nära stödet " + fmt(z.ref)) + " · " + SR[s.sr_lage].t.toLowerCase(), rank: 0, hot: true });
+    const miss = c.filter(x => x.ok !== true).map(x => x.t).join(" · ");
+    if (s.sr_lage in SR) return Object.assign(base, { cls: "b-ok", label: "Helt okej köpläge", text: tag + (miss ? " · " + miss : ""), rank: 1 });
+    return Object.assign(base, { cls: "b-wait", label: "Vänta", text: tag + (miss ? " · " + miss : ""), rank: 2 });
   }
   function srSell(t) { return signals.find(s => s.typ === "SÄLJ" && sameStock(s, t) && ts(s.skapad) > ts(t.skapad)); }
   function posVerdict(t) {
@@ -262,7 +254,7 @@
     if (s.skal) h += '<div><p class="why">' + esc(s.skal) + '</p><p class="src">' + esc([s.kalla, s.datum].filter(Boolean).join(" · ")) + "</p></div>";
     if (s.rapport) h += '<div class="note">⚠️ ' + esc(s.rapport) + "</div>";
     if (s.hogrisk) h += '<div class="note red">Högriskbolag enligt Stockrobber. Liten position, helst utan hävstång.</div>';
-    if (!sell && v.c) h += '<div class="check" data-live2><h3>Köpcheck <span>' + v.c.filter(x => x.ok === true).length + "/7</span></h3>" + v.c.map(x => '<div class="ck ' + (x.ok === true ? "y" : x.ok === false ? "n" : "u") + '"><i>' + (x.ok === true ? "✓" : x.ok === false ? "✕" : "…") + "</i>" + esc(x.t) + "</div>").join("") + "</div>";
+    if (!sell && v.c) h += '<div class="check" data-live2><h3>Köpcheck <span>' + v.c.filter(x => x.ok === true).length + "/" + v.c.length + "</span></h3>" + v.c.map(x => '<div class="ck ' + (x.ok === true ? "y" : x.ok === false ? "n" : "u") + '"><i>' + (x.ok === true ? "✓" : x.ok === false ? "✕" : "…") + "</i>" + esc(x.t) + "</div>").join("") + "</div>";
     if (s.ticker) h += '<div class="chart" data-tv="' + esc(s.ticker) + '"></div>';
     if (!sell) {
       const st = z ? z.stopp : stopp;
