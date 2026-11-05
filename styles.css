@@ -62,6 +62,7 @@ a{color:inherit}
 .verdict{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border-radius:8px;padding:6px 10px;white-space:nowrap}
 .b-buy{background:var(--blue);color:#fff}
+.b-ok{background:rgba(76,141,255,.18);color:var(--blue)}
 .b-wait{background:var(--raise);color:var(--ink)}
 .b-late{background:var(--raise);color:var(--muted)}
 .b-stop{background:rgba(255,107,107,.12);color:var(--down)}

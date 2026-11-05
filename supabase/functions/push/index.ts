@@ -61,9 +61,24 @@ async function onSignal(id: string) {
   const sell = s.typ === "SÄLJ";
   await send(null, {
     title: (sell ? "🔴 SÄLJ – " : "🟢 KÖP – ") + s.aktie,
-    body: sell ? (s.skal || "Stockrobber säljer. Öppna appen.") : "Köp " + fmt(s.kop) + " · Stopp " + fmt(s.stopp) + " · Mål " + fmt(s.mal1) + (s.skal ? "\n" + s.skal : ""),
+    body: sell ? (s.skal || "Stockrobber säljer. Öppna appen.") : "Köpzon runt " + fmt(s.kop) + " · Stopp " + fmt(s.stopp) + " · Motstånd " + fmt(s.mal1) + (s.skal ? "\n" + s.skal : ""),
     tag: "sig-" + s.id, url: APP,
   });
+}
+
+// Samma logik som appen (app.js zone)
+function zone(s: any, p: number) {
+  const list = (a: any[]) => (a || []).map((v) => v == null ? null : Number(v)).filter((v) => v != null && !isNaN(v)) as number[];
+  const sup = list([s.kop, ...(s.stod || [])]), res = list([s.mal1, s.mal2, ...(s.motstand || [])]);
+  const lv = Array.from(new Set([...sup, ...res])).sort((a, b) => a - b);
+  if (!lv.length) return null;
+  let i = -1; lv.forEach((v, k) => { if (v <= p) i = k; });
+  const ref = i < 0 ? lv[0] : lv[i];
+  const broken = res.includes(ref) && !sup.includes(ref);
+  let stopp = s.stopp;
+  if (s.kop != null && ref > s.kop && i > 0) stopp = Math.max(s.stopp || 0, +(lv[i - 1] * 0.985).toFixed(2));
+  const next = lv.filter((v) => v > p)[0] ?? null;
+  return { ref, broken, stopp, next, d: (p - ref) / ref * 100 };
 }
 
 async function check() {
@@ -80,16 +95,17 @@ async function check() {
   await Promise.all(syms.map(async (s) => { px[s] = await quote(s); }));
   const priceOf = (t: { ticker?: string | null }) => { const y = ySym(t.ticker); return y ? px[y] ?? null : null; };
 
-  // Signaler i köpläge
+  // Signaler i bra köpläge: inom 3 % över närmaste stöd (brutet motstånd räknas som stöd)
   for (const s of sigs || []) {
     const p = priceOf(s);
     if (p == null || s.kop == null) continue;
-    const inZone = p <= s.kop * 1.01 && (s.stopp == null || p >= s.stopp) && (s.mal1 == null || p < s.mal1);
-    if (!inZone) continue;
+    if (s.stopp != null && p < s.stopp) continue;
+    const z = zone(s, p);
+    if (!z || z.d > 3) continue;
     for (const u of users) {
       if ((dism || []).some((d) => d.user_id === u && d.signal_id === s.id)) continue;
       if ((trades || []).some((t) => t.user_id === u && t.signal_id === s.id)) continue;
-      if (await once(u, "kop:" + s.id)) await send([u], { title: "🔵 Köpläge – " + s.aktie, body: "Kursen " + fmt(p) + " är vid köpnivån " + fmt(s.kop) + ". Stopp " + fmt(s.stopp) + " · Mål " + fmt(s.mal1), tag: "kop-" + s.id, url: APP });
+      if (await once(u, "kop:" + s.id + ":" + z.ref)) await send([u], { title: "🟢 Bra köpläge – " + s.aktie, body: "Kurs " + fmt(p) + (z.broken ? ", över utbrottet " : ", nära stödet ") + fmt(z.ref) + ". Stopp " + fmt(z.stopp) + (z.next ? " · Nästa motstånd " + fmt(z.next) : ""), tag: "kop-" + s.id, url: APP });
     }
   }
   // Egna aktier: stopp, mål, knock-out
@@ -99,8 +115,8 @@ async function check() {
     let key = "", title = "", body = "";
     if (t.stopp != null && p <= t.stopp) { key = "stopp"; title = "🔴 Sälj – " + t.aktie; body = "Stoppet " + fmt(t.stopp) + " är nått. Kurs " + fmt(p) + "."; }
     else if (t.knockout != null && t.instrument !== "Aktie" && p <= t.knockout * 1.03) { key = "ko"; title = "⚠️ Nära knock-out – " + t.aktie; body = "Kursen " + fmt(p) + " är nära certifikatets stopnivå " + fmt(t.knockout) + "."; }
-    else if (t.mal2 != null && p >= t.mal2) { key = "mal2"; title = "🟢 Sälj – " + t.aktie; body = "Mål 2 " + fmt(t.mal2) + " är nått. Kurs " + fmt(p) + "."; }
-    else if (t.mal1 != null && p >= t.mal1) { key = "mal1"; title = "🟢 Ta hem vinst – " + t.aktie; body = "Mål 1 " + fmt(t.mal1) + " är nått. Sälj en del och flytta stoppet till köpkursen."; }
+    else if (t.mal2 != null && p >= t.mal2) { key = "mal2"; title = "🟢 Ta hem vinst – " + t.aktie; body = "Sista motståndet " + fmt(t.mal2) + " är nått. Överväg att sälja en del."; }
+    else if (t.mal1 != null && p >= t.mal1) { key = "mal1"; title = "🔵 Flytta stopp – " + t.aktie; body = "Över motståndet " + fmt(t.mal1) + ". Flytta upp stoppet till ca " + fmt(t.mal1 * 0.985) + "."; }
     if (key && await once(t.user_id, key + ":" + t.id)) await send([t.user_id], { title, body, tag: key + "-" + t.id, url: APP });
   }
 }

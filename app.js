@@ -102,14 +102,31 @@
   const open = () => trades.filter(t => t.status !== "Stängd");
   const closed = () => trades.filter(t => t.status === "Stängd");
 
+  // Köpzon: utgår bara från Stockrobbers egna stöd/motstånd. Ett brutet motstånd räknas som nytt stöd
+  // (han skriver själv att ett utbrott är en bekräftelsesignal), så "för sent" finns inte längre.
+  const ZON_BRA = 3, ZON_OK = 7;
+  function zone(s, p) {
+    const list = a => (a || []).map(num).filter(v => v != null);
+    const sup = list([s.kop].concat(s.stod || [])), res = list([s.mal1, s.mal2].concat(s.motstand || []));
+    const lv = Array.from(new Set(sup.concat(res))).sort((a, b) => a - b);
+    if (!lv.length || p == null) return null;
+    let i = -1; lv.forEach((v, k) => { if (v <= p) i = k; });
+    const ref = i < 0 ? lv[0] : lv[i];
+    const kop = num(s.kop), stopp0 = num(s.stopp);
+    const broken = res.includes(ref) && !sup.includes(ref);
+    let stopp = stopp0;
+    if (kop != null && ref > kop && i > 0) stopp = Math.max(stopp0 || 0, +(lv[i - 1] * 0.985).toFixed(2));
+    const next = lv.filter(v => v > p);
+    return { ref, broken, stopp, d: (p - ref) / ref * 100, top: ref >= 100 ? Math.round(ref * (1 + ZON_BRA / 100)) : +(ref * (1 + ZON_BRA / 100)).toFixed(2), next: next[0] != null ? next[0] : null, next2: next[1] != null ? next[1] : null };
+  }
   function buyVerdict(s) {
-    const p = price(s), kop = num(s.kop), stopp = num(s.stopp), m1 = num(s.mal1);
-    if (p == null || kop == null) return { cls: "b-wait", label: "Bevaka", text: "Väntar på kurs", rank: 2 };
-    const gap = (p - kop) / kop * 100;
-    if (stopp != null && p < stopp) return { cls: "b-stop", label: "Under stopp", text: "Kursen har fallit under stoppet. Vänta på ny signal.", rank: 4 };
-    if (m1 != null && p >= m1) return { cls: "b-late", label: "För sent", text: "Kursen har redan nått målet.", rank: 3 };
-    if (gap <= 1) return { cls: "b-buy", label: "Köpläge", text: gap < 0 ? apct(gap) + " under köpnivån, fortfarande över stopp" : "Kursen är vid köpnivån", rank: 0, hot: true };
-    return { cls: "b-wait", label: "Vänta", text: apct(gap) + " över köpnivån " + fmt(kop), rank: 1 };
+    const p = price(s), stopp = num(s.stopp);
+    if (p == null || num(s.kop) == null) return { cls: "b-wait", label: "Bevaka", text: "Väntar på kurs", rank: 2 };
+    if (stopp != null && p < stopp) return { cls: "b-stop", label: "Under stopp", text: "Stödet är brutet. Vänta på ny analys från Stockrobber.", rank: 4 };
+    const z = zone(s, p);
+    if (z.d <= ZON_BRA) return { cls: "b-buy", label: "Bra köpläge", text: z.broken ? "Över utbrottet " + fmt(z.ref) + ", gammalt motstånd blir stöd" : (z.d < 0 ? "Under köpnivån, fortfarande över stopp" : "Nära stödet " + fmt(z.ref)), rank: 0, hot: true, z };
+    if (z.d <= ZON_OK) return { cls: "b-ok", label: "Okej läge", text: apct(z.d) + " över stödet " + fmt(z.ref) + ". Okej för en swing, inte bästa nivån", rank: 1, z };
+    return { cls: "b-wait", label: "Vänta på rekyl", text: "Bra läge runt " + fmt(z.ref) + "–" + fmt(z.top), rank: 2, z };
   }
   function srSell(t) { return signals.find(s => s.typ === "SÄLJ" && sameStock(s, t) && ts(s.skapad) > ts(t.skapad)); }
   function posVerdict(t) {
@@ -118,10 +135,10 @@
     if (p == null) return { cls: "b-hold", label: "Håll", text: "Väntar på kurs", rank: 3 };
     if (stopp != null && p <= stopp) return { cls: "b-sell", label: "Sälj", text: "Stoppet " + fmt(stopp) + " är nått", rank: 0, hot: true };
     if (ko != null && t.instrument !== "Aktie" && p <= ko * 1.03) return { cls: "b-sell", label: "Nära knock-out", text: "Bara " + apct((p - ko) / p * 100) + " kvar till certifikatets stopnivå", rank: 0, hot: true };
-    if (m2 != null && p >= m2) return { cls: "b-take", label: "Sälj", text: "Mål 2 " + fmt(m2) + " är nått", rank: 1, hot: true };
-    if (m1 != null && p >= m1) return { cls: "b-take", label: "Ta hem vinst", text: "Mål 1 nått. Sälj en del och flytta stoppet till köpkursen.", rank: 1, hot: true };
+    if (m2 != null && p >= m2) return { cls: "b-take", label: "Ta hem vinst", text: "Sista motståndet " + fmt(m2) + " är nått. Överväg att sälja en del.", rank: 1, hot: true };
+    if (m1 != null && p >= m1) return { cls: "b-take", label: "Flytta stopp", text: "Över motståndet " + fmt(m1) + ". Flytta upp stoppet till ca " + fmt(m1 * 0.985) + " och låt den rulla.", rank: 1, hot: true };
     const parts = [];
-    if (m1 != null) parts.push(apct((m1 - p) / p * 100) + " till mål");
+    if (m1 != null) parts.push(apct((m1 - p) / p * 100) + " till motstånd");
     if (stopp != null) parts.push(apct((p - stopp) / p * 100) + " till stopp");
     return { cls: "b-hold", label: "Håll", text: parts.join(" · ") || "Inga nivåer satta", rank: 2 };
   }
@@ -143,9 +160,9 @@
     $("#markets").innerHTML = '<span><i class="dot' + (mk.se ? " on" : "") + '"></i>Stockholm ' + (mk.se ? "öppen" : "stängd") + '</span><span><i class="dot' + (mk.us ? " on" : "") + '"></i>USA ' + (mk.us ? "öppen" : "stängd") + "</span>";
     const sl = sigList(), pl = posList(), hl = closed();
     $("#cSig").textContent = sl.length; $("#cPos").textContent = pl.length; $("#cHis").textContent = hl.length;
-    const buyNow = sl.filter(x => x.v.label === "Köpläge").length, act = pl.filter(x => x.v.hot).length;
+    const buyNow = sl.filter(x => x.v.cls === "b-buy").length, act = pl.filter(x => x.v.hot).length;
     const parts = [];
-    parts.push(buyNow ? "<b>" + buyNow + " " + (buyNow === 1 ? "köpläge" : "köplägen") + "</b> just nu" : "Inga köplägen just nu");
+    parts.push(buyNow ? "<b>" + buyNow + " " + (buyNow === 1 ? "bra köpläge" : "bra köplägen") + "</b> just nu" : "Inga bra köplägen just nu");
     if (act) parts.push("<b>" + act + " " + (act === 1 ? "aktie" : "aktier") + " att agera på</b>");
     else if (pl.length) parts.push(pl.length + " " + (pl.length === 1 ? "aktie" : "aktier") + " att hålla");
     $("#headline").innerHTML = parts.join(" · ");
@@ -199,7 +216,8 @@
     let h = '<article class="card' + (v.hot ? " hot" : "") + '" data-card="' + esc(key) + '"><button class="sum" type="button" data-a="toggle" data-k="' + esc(key) + '" aria-expanded="' + isOpen + '"><div data-sum style="display:flex;flex-direction:column;gap:12px">' +
       head(s, ["Stockrobber", s.datum, s.hogrisk ? "Högrisk" : ""].filter(Boolean).join(" · ")) +
       '<div class="verdict"><span class="badge ' + v.cls + '">' + v.label + '</span><span class="why-short">' + esc(v.text) + "</span></div>";
-    if (!sell) h += '<div class="plan"><div class="k"><span>Köp</span><b>' + fmt(kop) + "</b></div><div><span>Stopp</span><b>" + fmt(stopp) + "</b></div><div><span>Mål</span><b>" + fmt(m1) + (m2 ? " → " + fmt(m2) : "") + "</b></div></div>";
+    const z = v.z || null;
+    if (!sell) h += '<div class="plan"><div class="k"><span>Köpzon</span><b>' + (z ? fmt(z.ref) + "–" + fmt(z.top) : fmt(kop)) + "</b></div><div><span>Stopp</span><b>" + fmt(z ? z.stopp : stopp) + "</b></div><div><span>Motstånd</span><b>" + fmt(z ? z.next : m1) + "</b></div></div>";
     h += "</div></button>";
     if (!isOpen) return h + "</article>";
 
@@ -209,13 +227,12 @@
     if (s.hogrisk) h += '<div class="note red">Högriskbolag enligt Stockrobber. Liten position, helst utan hävstång.</div>';
     if (s.ticker) h += '<div class="chart" data-tv="' + esc(s.ticker) + '"></div>';
     if (!sell) {
-      const rr = kop && stopp && m1 && kop > stopp ? (m1 - kop) / (kop - stopp) : null;
+      const st = z ? z.stopp : stopp;
       h += '<div class="facts" data-live>' +
         fact("Kurs nu", p != null ? fmt(p, 2) + " " + (s.valuta || "") : "–") +
-        fact("Avstånd till köpnivå", p != null && kop ? pct((p - kop) / kop * 100) : "–") +
-        fact("Möjlig uppsida till mål", kop && m1 ? pct((m1 - kop) / kop * 100) : "–") +
-        fact("Risk till stopp", kop && stopp ? pct((stopp - kop) / kop * 100) : "–") +
-        fact("Risk/belöning", rr != null ? "1 : " + rr.toFixed(1).replace(".", ",") : "–") +
+        fact("Över närmaste stöd", z ? pct(z.d) + " · " + fmt(z.ref) : "–") +
+        fact("Risk till stopp från nu", p != null && st ? pct((st - p) / p * 100) : "–") +
+        fact("Nästa motstånd", z && z.next ? fmt(z.next) + " (" + pct((z.next - p) / p * 100) + ")" : "Inget över, fritt fält") +
         fact("Mini L, stopnivå under", fmt(num(s.knockout_max))) +
         fact("Stöd", lvls(s.stod)) + fact("Motstånd", lvls(s.motstand)) + "</div>";
     }
@@ -278,7 +295,8 @@
   function tvUrl(t) { return "https://www.tradingview.com/symbols/" + encodeURIComponent(String(t).replace(":", "-")) + "/"; }
   // Nivåerna i formatet som indikatorn "Tradeloggen nivåer" läser: köp;stopp;mål1;mål2;knock-out
   function tvText(s) {
-    return [s.kop, s.stopp, s.mal1, s.mal2, s.knockout_max].map(v => num(v) != null ? String(num(v)) : "").join(";");
+    const z = zone(s, price(s));
+    return (z ? [z.ref, z.stopp, z.next, z.next2, s.knockout_max] : [s.kop, s.stopp, s.mal1, s.mal2, s.knockout_max]).map(v => num(v) != null ? String(num(v)) : "").join(";");
   }
 
 
@@ -340,7 +358,8 @@
     e.preventDefault();
     const s = buyFor, g = id => $("#" + id).value.trim();
     const kop = num(g("b-kop")), instr = g("b-instr"), ko = num(g("b-ko"));
-    const row = s ? { signal_id: s.id, aktie: s.aktie, ticker: s.ticker, valuta: s.valuta, stopp: s.stopp, mal1: s.mal1, mal2: s.mal2, anteckning: s.skal }
+    const zz = s ? zone(s, price(s)) : null;
+    const row = s ? { signal_id: s.id, aktie: s.aktie, ticker: s.ticker, valuta: s.valuta, stopp: zz ? zz.stopp : s.stopp, mal1: zz ? zz.next : s.mal1, mal2: zz ? zz.next2 : s.mal2, anteckning: s.skal }
       : { aktie: g("b-aktie"), ticker: g("b-ticker").toUpperCase() || null, valuta: /^(OMX|STO)/i.test(g("b-ticker")) || !g("b-ticker").includes(":") ? "SEK" : "USD", stopp: num(g("b-stopp")), mal1: num(g("b-mal1")) };
     if (!row.aktie) { $("#buyStatus").textContent = "Fyll i aktiens namn."; return; }
     if (kop == null) { $("#buyStatus").textContent = "Fyll i köpkursen."; return; }
@@ -382,7 +401,7 @@
       install: "På iPhone fungerar notiser bara när appen ligger på hemskärmen. Öppna sidan i Safari, tryck på Dela och välj Lägg till på hemskärmen. Öppna sedan appen därifrån och tryck på klockan igen.",
       unsupported: "Den här webbläsaren stödjer inte notiser. Prova Chrome på Android eller Safari på iPhone (med appen på hemskärmen).",
       denied: "Notiser är blockerade för appen. Tillåt dem i telefonens inställningar för webbläsaren eller appen, och försök igen.",
-      off: "Du får en notis när Stockrobber går ut med ett köp eller sälj, när en signal når köpläge och när en av dina aktier når mål, stopp eller närmar sig knock-out.",
+      off: "Du får en notis när Stockrobber går ut med ett köp eller sälj, när en signal hamnar i bra köpläge och när en av dina aktier når motstånd, stopp eller närmar sig knock-out.",
       on: "Notiser är påslagna på den här enheten. Du får besked om nya signaler, köplägen och när dina aktier når mål eller stopp."
     }[st];
     $("#pushText").textContent = txt; $("#pushStatus").textContent = "";
