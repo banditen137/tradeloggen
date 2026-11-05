@@ -1,0 +1,31 @@
+//@version=5
+// Tradeloggen nivåer – ritar köp, stopp, mål och knock-out som horisontella linjer.
+// Klistra in nivåerna från appen (knappen "Kopiera till TradingView") i inställningarna.
+indicator("Tradeloggen nivåer", overlay = true, max_lines_count = 10, max_labels_count = 10)
+
+niv = input.string("", "Nivåer från Tradeloggen", tooltip = "Format: köp;stopp;mål1;mål2;knock-out, t.ex. 834.6;795;898.2;1007;768")
+
+s = str.replace_all(str.replace_all(niv, " ", ""), ",", ".")
+parts = str.split(s, ";")
+lvl(i) => array.size(parts) > i and str.length(array.get(parts, i)) > 0 ? str.tonumber(array.get(parts, i)) : na
+
+blue  = color.rgb(76, 141, 255)
+red   = color.rgb(255, 107, 107)
+green = color.rgb(62, 207, 142)
+grey  = color.rgb(139, 139, 148)
+
+draw(p, c, t, st) =>
+    var line l = na
+    var label b = na
+    if barstate.islast
+        line.delete(l)
+        label.delete(b)
+        if not na(p)
+            l := line.new(bar_index - 1, p, bar_index, p, extend = extend.both, color = c, width = 2, style = st)
+            b := label.new(bar_index + 2, p, t + "  " + str.tostring(p), style = label.style_label_left, color = color.new(c, 85), textcolor = c, size = size.small)
+
+draw(lvl(0), blue,  "KÖP",   line.style_solid)
+draw(lvl(1), red,   "STOPP", line.style_dashed)
+draw(lvl(2), green, "MÅL 1", line.style_solid)
+draw(lvl(3), green, "MÅL 2", line.style_dotted)
+draw(lvl(4), grey,  "KO",    line.style_dotted)

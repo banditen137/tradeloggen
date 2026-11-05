@@ -221,7 +221,7 @@
     }
     h += '<div class="btns">';
     if (!sell) h += '<button class="btn primary wide" type="button" data-a="buy" data-k="' + esc(key) + '">Jag köpte</button>';
-    if (s.ticker) h += '<a class="btn" href="https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(s.ticker) + '" target="_blank" rel="noopener">TradingView ↗</a>';
+    if (s.ticker) h += '<a class="btn" href="' + tvUrl(s.ticker) + '">TradingView ↗</a>';
     if (!sell) h += '<button class="btn" type="button" data-a="copy" data-k="' + esc(key) + '">' + (copied === key ? "Kopierat ✓" : "Kopiera nivåer") + "</button>";
     h += (inline && inline.key === key && inline.kind === "dismiss")
       ? '<button class="btn danger wide" type="button" data-a="dismiss" data-k="' + esc(key) + '">Ja, dölj signalen</button>'
@@ -260,7 +260,7 @@
       h += '<div class="btns"><button class="btn ghost" type="button" data-a="cancel">Behåll</button><button class="btn danger" type="button" data-a="del" data-k="' + esc(key) + '">Ja, ta bort</button></div>';
     } else {
       h += '<div class="btns"><button class="btn primary wide" type="button" data-a="askSell" data-k="' + esc(key) + '">Jag sålde</button>' +
-        (t.ticker ? '<a class="btn" href="https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(t.ticker) + '" target="_blank" rel="noopener">TradingView ↗</a>' : "") +
+        (t.ticker ? '<a class="btn" href="' + tvUrl(t.ticker) + '">TradingView ↗</a>' : "") +
         '<button class="btn ghost' + (t.ticker ? "" : " wide") + '" type="button" data-a="askDel" data-k="' + esc(key) + '">Ta bort</button></div>';
     }
     return h + "</div></article>";
@@ -274,15 +274,13 @@
   }
   const fact = (a, b) => '<div class="fact"><span>' + a + "</span><b>" + b + "</b></div>";
 
+  // Öppnar symbolsidan – på mobil tar iOS/Android den till TradingView-appen om den är installerad.
+  function tvUrl(t) { return "https://www.tradingview.com/symbols/" + encodeURIComponent(String(t).replace(":", "-")) + "/"; }
+  // Nivåerna i formatet som indikatorn "Tradeloggen nivåer" läser: köp;stopp;mål1;mål2;knock-out
   function tvText(s) {
-    const c = " " + (s.valuta || "");
-    const r = [s.aktie + (s.ticker ? " (" + s.ticker + ")" : "") + " – Stockrobber " + (s.datum || "")];
-    [["Köp", s.kop], ["Stopp", s.stopp], ["Mål 1", s.mal1], ["Mål 2", s.mal2]].forEach(x => { if (num(x[1]) != null) r.push(x[0] + ": " + fmt(num(x[1])) + c); });
-    if (s.stod && s.stod.length) r.push("Stöd: " + lvls(s.stod) + c);
-    if (s.motstand && s.motstand.length) r.push("Motstånd: " + lvls(s.motstand) + c);
-    if (num(s.knockout_max) != null) r.push("Mini L: stopnivå under " + fmt(num(s.knockout_max)) + c);
-    return r.join("\n");
+    return [s.kop, s.stopp, s.mal1, s.mal2, s.knockout_max].map(v => num(v) != null ? String(num(v)) : "").join(";");
   }
+
 
   function mountCharts() {
     document.querySelectorAll("[data-tv]").forEach(box => {
@@ -291,7 +289,7 @@
       const i = document.createElement("div"); i.className = "tradingview-widget-container__widget"; w.appendChild(i);
       const s = document.createElement("script"); s.async = true;
       s.src = "https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js";
-      s.textContent = JSON.stringify({ symbol: box.dataset.tv, width: "100%", height: 220, locale: "sv_SE", dateRange: "3M", colorTheme: "dark", isTransparent: true, autosize: false, largeChartUrl: "", noTimeScale: false, trendLineColor: "rgba(76,141,255,1)", underLineColor: "rgba(76,141,255,0.18)", underLineBottomColor: "rgba(76,141,255,0)" });
+      s.textContent = JSON.stringify({ symbol: box.dataset.tv, width: "100%", height: 220, locale: "sv_SE", dateRange: "3M", colorTheme: "dark", isTransparent: false, autosize: false, largeChartUrl: "", noTimeScale: false, trendLineColor: "rgba(76,141,255,1)", underLineColor: "rgba(76,141,255,0.18)", underLineBottomColor: "rgba(76,141,255,0)" });
       w.appendChild(s); box.appendChild(w);
     });
   }
