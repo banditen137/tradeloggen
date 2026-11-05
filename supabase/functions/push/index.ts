@@ -104,12 +104,9 @@ async function check() {
     const qq = qOf(s), p = qq?.price ?? null;
     if (p == null || s.kop == null) continue;
     if (s.stopp != null && p < s.stopp) continue;
-    if (!["köper", "hade_köpt", "behåller"].includes(s.sr_lage)) continue;
     const z = zone(s, p);
     if (!z || z.d > 3) continue;
     if (s.rapport_datum) { const rd = (new Date(s.rapport_datum + "T12:00:00Z").getTime() - Date.now()) / 864e5; if (rd >= -1 && rd <= 3) continue; }
-    // Bra köpläge = hans besked + köpzon + färsk analys + ingen rapport (samma regler som appen)
-    if ((Date.now() - new Date(s.analys_datum || s.skapad).getTime()) / 864e5 > 7) continue;
     for (const u of users) {
       if ((dism || []).some((d) => d.user_id === u && d.signal_id === s.id)) continue;
       if ((trades || []).some((t) => t.user_id === u && t.signal_id === s.id)) continue;
