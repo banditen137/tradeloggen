@@ -151,15 +151,19 @@
     const p = price(s), stopp = num(s.stopp);
     if (p == null || num(s.kop) == null) return { cls: "b-wait", label: "Bevaka", text: "Väntar på kurs", rank: 3 };
     if (stopp != null && p < stopp) return { cls: "b-stop", label: "Under stopp", text: "Stödet är brutet. Vänta på ny analys från Stockrobber.", rank: 5 };
-    const z = zone(s, p), c = checks(s, p, z), fail = c.filter(x => x.ok !== true), sr = SR[s.sr_lage];
-    const base = { z, c };
+    // Stockrobber bestämmer, kontrollerna graderar. Tre spärrar ger alltid "Vänta".
+    const z = zone(s, p), c = checks(s, p, z), score = c.filter(x => x.ok === true).length;
+    const fail = c.filter(x => x.ok !== true && x.k !== "sr" && x.k !== "zon");
+    const base = { z, c, score };
+    const why = fail.length ? " · " + fail.map(x => x.t).join(" · ") : "";
     if (s.sr_lage === "väntar") return Object.assign(base, { cls: "b-wait", label: "Vänta", text: s.rapport || "Stockrobber väntar själv", rank: 4 });
-    if (!fail.length) return Object.assign(base, { cls: "b-buy", label: "Köp", text: "Köpcheck grön 7/7" + (z.broken ? ", över utbrottet " + fmt(z.ref) : ""), rank: 0, hot: true });
-    const hard = fail.filter(x => x.k !== "zon");
-    if (z.d <= ZON_OK && hard.length <= 1 && (!hard.length || hard[0].k !== "sr" || s.sr_lage === "överväger"))
-      return Object.assign(base, { cls: "b-ok", label: "Okej läge", text: (7 - fail.length) + "/7 · " + fail.map(x => x.t).join(" · "), rank: 1 });
+    const rep = c.find(x => x.k === "rapport");
+    if (rep && rep.ok === false) return Object.assign(base, { cls: "b-wait", label: "Vänta", text: rep.t, rank: 3 });
     if (z.d > ZON_OK) return Object.assign(base, { cls: "b-wait", label: "Vänta på rekyl", text: "Bra läge runt " + fmt(z.ref) + "–" + fmt(z.top), rank: 2 });
-    return Object.assign(base, { cls: "b-wait", label: "Vänta", text: (7 - fail.length) + "/7 · " + hard.map(x => x.t).join(" · "), rank: 2 });
+    const strong = SR[s.sr_lage] && SR[s.sr_lage].ok;
+    if (strong && z.d <= ZON_BRA && score >= 6) return Object.assign(base, { cls: "b-buy", label: "Bra köpläge", text: score + "/7" + (z.broken ? " · över utbrottet " + fmt(z.ref) : " · nära stödet " + fmt(z.ref)) + why, rank: 0, hot: true });
+    if (score >= 5) return Object.assign(base, { cls: "b-ok", label: "Helt okej köpläge", text: score + "/7" + why, rank: 1 });
+    return Object.assign(base, { cls: "b-wait", label: "Vänta", text: score + "/7" + why, rank: 2 });
   }
   function srSell(t) { return signals.find(s => s.typ === "SÄLJ" && sameStock(s, t) && ts(s.skapad) > ts(t.skapad)); }
   function posVerdict(t) {
@@ -195,7 +199,7 @@
     $("#cSig").textContent = sl.length; $("#cPos").textContent = pl.length; $("#cHis").textContent = hl.length;
     const buyNow = sl.filter(x => x.v.cls === "b-buy").length, act = pl.filter(x => x.v.hot).length;
     const parts = [];
-    parts.push(buyNow ? "<b>" + buyNow + " " + (buyNow === 1 ? "grön köpcheck" : "gröna köpcheckar") + "</b> just nu" : "Inga gröna köpcheckar just nu");
+    parts.push(buyNow ? "<b>" + buyNow + " " + (buyNow === 1 ? "bra köpläge" : "bra köplägen") + "</b> just nu" : "Inga bra köplägen just nu");
     if (act) parts.push("<b>" + act + " " + (act === 1 ? "aktie" : "aktier") + " att agera på</b>");
     else if (pl.length) parts.push(pl.length + " " + (pl.length === 1 ? "aktie" : "aktier") + " att hålla");
     $("#headline").innerHTML = parts.join(" · ");

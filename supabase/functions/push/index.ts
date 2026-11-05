@@ -99,7 +99,7 @@ async function check() {
   const qOf = (t: { ticker?: string | null }) => { const y = ySym(t.ticker); return y ? px[y] ?? null : null; };
   const priceOf = (t: { ticker?: string | null }) => qOf(t)?.price ?? null;
 
-  // Signaler med grön Köpcheck (samma regler som appen): alla 7 kontroller måste vara gröna
+  // Signaler i bra köpläge (samma regler som appen)
   for (const s of sigs || []) {
     const qq = qOf(s), p = qq?.price ?? null;
     if (p == null || s.kop == null) continue;
@@ -107,15 +107,21 @@ async function check() {
     if (!["köper", "hade_köpt", "behåller"].includes(s.sr_lage)) continue;
     const z = zone(s, p);
     if (!z || z.d > 3) continue;
-    const mk = px[(s.valuta || "SEK") === "SEK" ? "^OMX" : "^NDX"];
-    if (!qq?.sma50 || p <= qq.sma50 || !mk?.sma50 || mk.price <= mk.sma50) continue;
     if (s.rapport_datum) { const rd = (new Date(s.rapport_datum + "T12:00:00Z").getTime() - Date.now()) / 864e5; if (rd >= -1 && rd <= 3) continue; }
-    if ((Date.now() - new Date(s.analys_datum || s.skapad).getTime()) / 864e5 > 7) continue;
-    if (!z.stopp || (p - z.stopp) / p * 100 > 7) continue;
+    // Bra köpläge = minst 6/7: SR + köpzon + högst en av trend/marknad/färsk/risk får fallera
+    const mk = px[(s.valuta || "SEK") === "SEK" ? "^OMX" : "^NDX"];
+    const soft = [
+      !!qq?.sma50 && p > qq.sma50,
+      !!mk?.sma50 && mk.price > mk.sma50,
+      (Date.now() - new Date(s.analys_datum || s.skapad).getTime()) / 864e5 <= 7,
+      !!z.stopp && (p - z.stopp) / p * 100 <= 7,
+    ];
+    const score = 3 + soft.filter(Boolean).length; // SR, zon och rapport är redan gröna här
+    if (score < 6) continue;
     for (const u of users) {
       if ((dism || []).some((d) => d.user_id === u && d.signal_id === s.id)) continue;
       if ((trades || []).some((t) => t.user_id === u && t.signal_id === s.id)) continue;
-      if (await once(u, "kop:" + s.id + ":" + z.ref)) await send([u], { title: "🟢 Köp – " + s.aktie + " (Köpcheck 7/7)", body: "Kurs " + fmt(p) + (z.broken ? ", över utbrottet " : ", i köpzonen vid ") + fmt(z.ref) + ". Stopp " + fmt(z.stopp) + (z.next ? " · Nästa motstånd " + fmt(z.next) : ""), tag: "kop-" + s.id, url: APP });
+      if (await once(u, "kop:" + s.id + ":" + z.ref)) await send([u], { title: "🟢 Bra köpläge – " + s.aktie + " (" + score + "/7)", body: "Kurs " + fmt(p) + (z.broken ? ", över utbrottet " : ", i köpzonen vid ") + fmt(z.ref) + ". Stopp " + fmt(z.stopp) + (z.next ? " · Nästa motstånd " + fmt(z.next) : ""), tag: "kop-" + s.id, url: APP });
     }
   }
   // Egna aktier: stopp, mål, knock-out
