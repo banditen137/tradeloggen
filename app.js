@@ -78,7 +78,7 @@
   const price = t => { const x = q(t); return x && typeof x.price === "number" ? x.price : num(t.kurs); };
   const today = t => { const x = q(t); return x && x.prev ? (x.price - x.prev) / x.prev * 100 : null; };
   async function fetchQuotes() {
-    const syms = Array.from(new Set(signals.concat(trades.filter(t => t.status !== "Stängd")).map(t => ySym(t.ticker)).filter(Boolean)));
+    const syms = Array.from(new Set(signals.concat(trades.filter(t => t.status !== "Stängd")).map(t => ySym(t.ticker)).filter(Boolean).concat(["^OMX", "^NDX"])));
     if (!syms.length) return;
     try {
       const r = await fetch("/api/quote?symbols=" + encodeURIComponent(syms.join(",")));
@@ -119,14 +119,47 @@
     const next = lv.filter(v => v > p);
     return { ref, broken, stopp, d: (p - ref) / ref * 100, top: ref >= 100 ? Math.round(ref * (1 + ZON_BRA / 100)) : +(ref * (1 + ZON_BRA / 100)).toFixed(2), next: next[0] != null ? next[0] : null, next2: next[1] != null ? next[1] : null };
   }
+  // ---------- Köpcheck ----------
+  const SR = {
+    "köper": { t: "Köper själv just nu", ok: true, strong: true },
+    "hade_köpt": { t: "Hade köpt om han inte redan ägt mycket", ok: true, strong: true },
+    "behåller": { t: "Behåller med övertygelse, köper inte mer själv", ok: true, strong: false },
+    "överväger": { t: "Överväger att köpa, inte bestämt", ok: false },
+    "väntar": { t: "Väntar själv", ok: false }
+  };
+  const MAX_RISK = 7, MAX_AGE = 7;
+  const mktSym = s => (s.valuta || "SEK") === "SEK" ? "^OMX" : "^NDX";
+  function checks(s, p, z) {
+    const sr = SR[s.sr_lage] || { t: "Okänt besked", ok: false };
+    const qq = q(s), mk = quotes[mktSym(s)];
+    const age = (Date.now() - ts(s.analys_datum || s.skapad)) / 864e5;
+    const rd = s.rapport_datum ? (ts(s.rapport_datum + "T12:00:00Z") - Date.now()) / 864e5 : null;
+    const risk = z && z.stopp && p ? (p - z.stopp) / p * 100 : null;
+    const trendOk = qq && qq.sma50 ? p > qq.sma50 : null;
+    const mkOk = mk && mk.sma50 ? mk.price > mk.sma50 : null;
+    return [
+      { k: "sr", ok: sr.ok, t: "Stockrobber: " + sr.t },
+      { k: "zon", ok: z ? z.d <= ZON_BRA : false, t: z ? (z.d <= ZON_BRA ? "I köpzonen " + fmt(z.ref) + "–" + fmt(z.top) : apct(z.d) + " över stödet " + fmt(z.ref)) : "Inga nivåer" },
+      { k: "trend", ok: trendOk, t: trendOk == null ? "Trend: hämtar data" : "Aktien " + (trendOk ? "över" : "under") + " sitt 50-dagarssnitt (" + fmt(qq.sma50) + ")" },
+      { k: "mkt", ok: mkOk, t: mkOk == null ? "Marknaden: hämtar data" : (mktSym(s) === "^OMX" ? "OMXS30" : "Nasdaq 100") + " " + (mkOk ? "över" : "under") + " sitt 50-dagarssnitt" },
+      { k: "rapport", ok: rd == null || rd < -1 || rd > 3, t: rd != null && rd >= -1 && rd <= 3 ? "Rapport " + date(s.rapport_datum) + ", vänta till efter" : "Ingen rapport de närmaste dagarna" },
+      { k: "färsk", ok: age <= MAX_AGE, t: "Analysen är " + (age < 1 ? "från idag" : Math.floor(age) + " d gammal") },
+      { k: "risk", ok: risk != null && risk <= MAX_RISK, t: risk != null ? "Risk till stopp " + fmt(risk, 1) + " %" : "Risk: okänd" }
+    ];
+  }
   function buyVerdict(s) {
     const p = price(s), stopp = num(s.stopp);
-    if (p == null || num(s.kop) == null) return { cls: "b-wait", label: "Bevaka", text: "Väntar på kurs", rank: 2 };
-    if (stopp != null && p < stopp) return { cls: "b-stop", label: "Under stopp", text: "Stödet är brutet. Vänta på ny analys från Stockrobber.", rank: 4 };
-    const z = zone(s, p);
-    if (z.d <= ZON_BRA) return { cls: "b-buy", label: "Bra köpläge", text: z.broken ? "Över utbrottet " + fmt(z.ref) + ", gammalt motstånd blir stöd" : (z.d < 0 ? "Under köpnivån, fortfarande över stopp" : "Nära stödet " + fmt(z.ref)), rank: 0, hot: true, z };
-    if (z.d <= ZON_OK) return { cls: "b-ok", label: "Okej läge", text: apct(z.d) + " över stödet " + fmt(z.ref) + ". Okej för en swing, inte bästa nivån", rank: 1, z };
-    return { cls: "b-wait", label: "Vänta på rekyl", text: "Bra läge runt " + fmt(z.ref) + "–" + fmt(z.top), rank: 2, z };
+    if (p == null || num(s.kop) == null) return { cls: "b-wait", label: "Bevaka", text: "Väntar på kurs", rank: 3 };
+    if (stopp != null && p < stopp) return { cls: "b-stop", label: "Under stopp", text: "Stödet är brutet. Vänta på ny analys från Stockrobber.", rank: 5 };
+    const z = zone(s, p), c = checks(s, p, z), fail = c.filter(x => x.ok !== true), sr = SR[s.sr_lage];
+    const base = { z, c };
+    if (s.sr_lage === "väntar") return Object.assign(base, { cls: "b-wait", label: "Vänta", text: s.rapport || "Stockrobber väntar själv", rank: 4 });
+    if (!fail.length) return Object.assign(base, { cls: "b-buy", label: "Köp", text: "Köpcheck grön 7/7" + (z.broken ? ", över utbrottet " + fmt(z.ref) : ""), rank: 0, hot: true });
+    const hard = fail.filter(x => x.k !== "zon");
+    if (z.d <= ZON_OK && hard.length <= 1 && (!hard.length || hard[0].k !== "sr" || s.sr_lage === "överväger"))
+      return Object.assign(base, { cls: "b-ok", label: "Okej läge", text: (7 - fail.length) + "/7 · " + fail.map(x => x.t).join(" · "), rank: 1 });
+    if (z.d > ZON_OK) return Object.assign(base, { cls: "b-wait", label: "Vänta på rekyl", text: "Bra läge runt " + fmt(z.ref) + "–" + fmt(z.top), rank: 2 });
+    return Object.assign(base, { cls: "b-wait", label: "Vänta", text: (7 - fail.length) + "/7 · " + hard.map(x => x.t).join(" · "), rank: 2 });
   }
   function srSell(t) { return signals.find(s => s.typ === "SÄLJ" && sameStock(s, t) && ts(s.skapad) > ts(t.skapad)); }
   function posVerdict(t) {
@@ -162,7 +195,7 @@
     $("#cSig").textContent = sl.length; $("#cPos").textContent = pl.length; $("#cHis").textContent = hl.length;
     const buyNow = sl.filter(x => x.v.cls === "b-buy").length, act = pl.filter(x => x.v.hot).length;
     const parts = [];
-    parts.push(buyNow ? "<b>" + buyNow + " " + (buyNow === 1 ? "bra köpläge" : "bra köplägen") + "</b> just nu" : "Inga bra köplägen just nu");
+    parts.push(buyNow ? "<b>" + buyNow + " " + (buyNow === 1 ? "grön köpcheck" : "gröna köpcheckar") + "</b> just nu" : "Inga gröna köpcheckar just nu");
     if (act) parts.push("<b>" + act + " " + (act === 1 ? "aktie" : "aktier") + " att agera på</b>");
     else if (pl.length) parts.push(pl.length + " " + (pl.length === 1 ? "aktie" : "aktier") + " att hålla");
     $("#headline").innerHTML = parts.join(" · ");
@@ -188,7 +221,7 @@
         const el = document.querySelector('[data-card="' + CSS.escape(r.key) + '"]'); if (!el) return;
         const tmp = document.createElement("div"); tmp.innerHTML = r.html;
         const n = tmp.firstElementChild;
-        ["[data-sum]", "[data-live]"].forEach(sel => { const a = el.querySelector(sel), b = n.querySelector(sel); if (a && b) a.replaceWith(b); });
+        ["[data-sum]", "[data-live]", "[data-live2]"].forEach(sel => { const a = el.querySelector(sel), b = n.querySelector(sel); if (a && b) a.replaceWith(b); });
         el.className = n.className;
       });
       return;
@@ -225,6 +258,7 @@
     if (s.skal) h += '<div><p class="why">' + esc(s.skal) + '</p><p class="src">' + esc([s.kalla, s.datum].filter(Boolean).join(" · ")) + "</p></div>";
     if (s.rapport) h += '<div class="note">⚠️ ' + esc(s.rapport) + "</div>";
     if (s.hogrisk) h += '<div class="note red">Högriskbolag enligt Stockrobber. Liten position, helst utan hävstång.</div>';
+    if (!sell && v.c) h += '<div class="check" data-live2><h3>Köpcheck <span>' + v.c.filter(x => x.ok === true).length + "/7</span></h3>" + v.c.map(x => '<div class="ck ' + (x.ok === true ? "y" : x.ok === false ? "n" : "u") + '"><i>' + (x.ok === true ? "✓" : x.ok === false ? "✕" : "…") + "</i>" + esc(x.t) + "</div>").join("") + "</div>";
     if (s.ticker) h += '<div class="chart" data-tv="' + esc(s.ticker) + '"></div>';
     if (!sell) {
       const st = z ? z.stopp : stopp;

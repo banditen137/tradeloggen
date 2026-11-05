@@ -39,13 +39,16 @@ function ySym(tv?: string | null) {
   if (/XETR|FWB/.test(ex)) return s + ".DE";
   return s.replace(/\./g, "-");
 }
-async function quote(sym: string): Promise<number | null> {
+type Q = { price: number; sma50: number | null };
+async function quote(sym: string): Promise<Q | null> {
   try {
-    const r = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(sym) + "?range=1d&interval=1d", { headers: { "User-Agent": "Mozilla/5.0 (compatible; Tradeloggen/1.0)" } });
+    const r = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(sym) + "?range=6mo&interval=1d", { headers: { "User-Agent": "Mozilla/5.0 (compatible; Tradeloggen/1.0)" } });
     if (!r.ok) return null;
     const j = await r.json();
-    const p = j?.chart?.result?.[0]?.meta?.regularMarketPrice;
-    return typeof p === "number" ? p : null;
+    const res = j?.chart?.result?.[0], p = res?.meta?.regularMarketPrice;
+    if (typeof p !== "number") return null;
+    const c = ((res.indicators?.quote?.[0]?.close || []) as unknown[]).filter((v): v is number => typeof v === "number").slice(-50);
+    return { price: p, sma50: c.length >= 40 ? c.reduce((a, b) => a + b, 0) / c.length : null };
   } catch { return null; }
 }
 
@@ -90,22 +93,29 @@ async function check() {
   ]);
   const users = Array.from(new Set((subs || []).map((s) => s.user_id)));
   if (!users.length) return;
-  const syms = Array.from(new Set([...(sigs || []), ...(trades || [])].map((t) => ySym(t.ticker)).filter(Boolean))) as string[];
-  const px: Record<string, number | null> = {};
+  const syms = Array.from(new Set([...[...(sigs || []), ...(trades || [])].map((t) => ySym(t.ticker)).filter(Boolean), "^OMX", "^NDX"])) as string[];
+  const px: Record<string, Q | null> = {};
   await Promise.all(syms.map(async (s) => { px[s] = await quote(s); }));
-  const priceOf = (t: { ticker?: string | null }) => { const y = ySym(t.ticker); return y ? px[y] ?? null : null; };
+  const qOf = (t: { ticker?: string | null }) => { const y = ySym(t.ticker); return y ? px[y] ?? null : null; };
+  const priceOf = (t: { ticker?: string | null }) => qOf(t)?.price ?? null;
 
-  // Signaler i bra köpläge: inom 3 % över närmaste stöd (brutet motstånd räknas som stöd)
+  // Signaler med grön Köpcheck (samma regler som appen): alla 7 kontroller måste vara gröna
   for (const s of sigs || []) {
-    const p = priceOf(s);
+    const qq = qOf(s), p = qq?.price ?? null;
     if (p == null || s.kop == null) continue;
     if (s.stopp != null && p < s.stopp) continue;
+    if (!["köper", "hade_köpt", "behåller"].includes(s.sr_lage)) continue;
     const z = zone(s, p);
     if (!z || z.d > 3) continue;
+    const mk = px[(s.valuta || "SEK") === "SEK" ? "^OMX" : "^NDX"];
+    if (!qq?.sma50 || p <= qq.sma50 || !mk?.sma50 || mk.price <= mk.sma50) continue;
+    if (s.rapport_datum) { const rd = (new Date(s.rapport_datum + "T12:00:00Z").getTime() - Date.now()) / 864e5; if (rd >= -1 && rd <= 3) continue; }
+    if ((Date.now() - new Date(s.analys_datum || s.skapad).getTime()) / 864e5 > 7) continue;
+    if (!z.stopp || (p - z.stopp) / p * 100 > 7) continue;
     for (const u of users) {
       if ((dism || []).some((d) => d.user_id === u && d.signal_id === s.id)) continue;
       if ((trades || []).some((t) => t.user_id === u && t.signal_id === s.id)) continue;
-      if (await once(u, "kop:" + s.id + ":" + z.ref)) await send([u], { title: "🟢 Bra köpläge – " + s.aktie, body: "Kurs " + fmt(p) + (z.broken ? ", över utbrottet " : ", nära stödet ") + fmt(z.ref) + ". Stopp " + fmt(z.stopp) + (z.next ? " · Nästa motstånd " + fmt(z.next) : ""), tag: "kop-" + s.id, url: APP });
+      if (await once(u, "kop:" + s.id + ":" + z.ref)) await send([u], { title: "🟢 Köp – " + s.aktie + " (Köpcheck 7/7)", body: "Kurs " + fmt(p) + (z.broken ? ", över utbrottet " : ", i köpzonen vid ") + fmt(z.ref) + ". Stopp " + fmt(z.stopp) + (z.next ? " · Nästa motstånd " + fmt(z.next) : ""), tag: "kop-" + s.id, url: APP });
     }
   }
   // Egna aktier: stopp, mål, knock-out

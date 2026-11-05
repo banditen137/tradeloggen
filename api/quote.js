@@ -8,7 +8,7 @@ module.exports = async (req, res) => {
   const out = {};
   await Promise.all(list.map(async s => {
     try {
-      const r = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(s) + "?range=5d&interval=1d", {
+      const r = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(s) + "?range=6mo&interval=1d", {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; Tradeloggen/1.0)", "Accept": "application/json" }
       });
       if (!r.ok) { out[s] = null; return; }
@@ -17,7 +17,9 @@ module.exports = async (req, res) => {
       if (!m || typeof m.regularMarketPrice !== "number") { out[s] = null; return; }
       const closes = (j.chart.result[0].indicators.quote[0].close || []).filter(v => typeof v === "number");
       const prev = closes.length >= 2 ? closes[closes.length - 2] : (m.chartPreviousClose || m.previousClose || null);
-      out[s] = { price: m.regularMarketPrice, prev, currency: m.currency || null, time: m.regularMarketTime || null };
+      const last50 = closes.slice(-50);
+      const sma50 = last50.length >= 40 ? last50.reduce((a, b) => a + b, 0) / last50.length : null;
+      out[s] = { price: m.regularMarketPrice, prev, sma50, currency: m.currency || null, time: m.regularMarketTime || null };
     } catch (e) { out[s] = null; }
   }));
   res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=120");
