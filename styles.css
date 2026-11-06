@@ -147,3 +147,10 @@ textarea{min-height:64px;resize:vertical}
 .ck.n i{background:rgba(255,107,107,.14);color:var(--down)}
 .ck.u i{background:var(--raise);color:var(--muted)}
 .ck.n{color:var(--muted)}
+
+.imp{cursor:pointer;border:1px dashed var(--blue-line);background:var(--blue-soft);color:var(--blue)}
+.lots{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.lot{display:flex;justify-content:space-between;gap:10px;padding:10px 12px;font-size:13px}
+.lot+.lot{border-top:1px solid var(--line)}
+.lot span{color:var(--muted)}
+.lot b{font-family:var(--mono);font-weight:500}

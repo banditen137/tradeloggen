@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="/styles.css?v=1793953957">
+<link rel="stylesheet" href="/styles.css?v=1793954387">
 </head>
 <body class="auth">
 
@@ -71,6 +71,8 @@
     <form id="buyForm" autocomplete="off">
       <div class="grab"></div>
       <h2 id="buyTitle">Jag köpte</h2>
+      <label class="btn wide imp" for="b-img"><span id="impLbl">📷 Läs in skärmbild från Avanza</span><input id="b-img" type="file" accept="image/*" multiple hidden></label>
+      <p class="hint" id="impHint">Ta en skärmbild på innehavet eller certifikatets sida (gärna båda). Appen fyller i allt nedan.</p>
       <div class="grid" id="manualFields">
         <label class="full">Aktie<input id="b-aktie" placeholder="t.ex. Volvo B"></label>
         <label class="full">TradingView-symbol<input id="b-ticker" placeholder="t.ex. OMXSTO:VOLV_B eller NASDAQ:GOOGL" autocapitalize="characters"></label>
@@ -85,9 +87,12 @@
         <label>Stop loss<input id="b-ko" inputmode="decimal" placeholder="från Avanza"></label>
         <label>Cert. köpkurs (kr)<input id="b-ck" inputmode="decimal" placeholder="Inköpskurs"></label>
         <label>Cert. kurs nu (kr)<input id="b-cn" inputmode="decimal" placeholder="Kurs"></label>
+        <label>Antal<input id="b-antal" inputmode="decimal" placeholder="st"></label>
+        <label>Certifikatets namn<input id="b-cnamn" placeholder="t.ex. MINI L ABB AVA 16"></label>
       </div>
       <div class="grid">
         <label class="full">Aktiens kurs när du köpte<input id="b-kop" inputmode="decimal" required></label>
+        <label class="full" id="antalAktie" hidden>Antal aktier<input id="b-antal2" inputmode="decimal" placeholder="st"></label>
       </div>
       <p class="hint" id="buyHint">Certifikatets stopnivå står på Avanza och anges i aktiens pris.</p>
       <p class="status" id="buyStatus" role="status"></p>
@@ -130,7 +135,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="/config.js?v=1793953957"></script>
-<script src="/app.js?v=1793953957"></script>
+<script src="/config.js?v=1793954387"></script>
+<script src="/app.js?v=1793954387"></script>
 </body>
 </html>

@@ -146,13 +146,22 @@
   }
   const lev = t => t.instrument === "Aktie" ? 1 : (num(t.hav) || 1);
   function since(t) { const p = t.status === "Stängd" ? num(t.salj_kurs) : price(t), kop = num(t.kop); return p != null && kop ? (p - kop) / kop * 100 : null; }
-  // Certifikat: finansieringsnivån F sparas i kolumnen insats. Värdet följer (aktie − F), så
-  // utvecklingen blir (S − F) / (S0 − F) − 1 – exakt som på Avanza (bortsett från valuta och liten daglig ränta).
-  const finOf = t => t.instrument !== "Aktie" ? num(t.insats) : null;
+  // Certifikat: värdet följer (aktie − finansieringsnivå F), så utvecklingen blir (S − F) / (S0 − F) − 1,
+  // exakt som på Avanza (bortsett från valuta och liten daglig ränta).
+  const finOf = t => t.instrument !== "Aktie" ? num(t.fin_niva) : null;
+  function lotGrowth(t, p) {
+    const F = finOf(t), kop = num(t.kop);
+    if (p == null || kop == null) return null;
+    if (t.instrument === "Aktie") return p / kop;
+    if (F != null && kop > F) return (p - F) / (kop - F);
+    const L = lev(t); return 1 + (p / kop - 1) * L;
+  }
+  // Flera köp (påfyllningar) slås ihop: viktat efter insatt belopp
   function certSince(t) {
-    const F = finOf(t), kop = num(t.kop), p = t.status === "Stängd" ? num(t.salj_kurs) : price(t);
-    if (F != null && kop != null && p != null && kop > F) return ((p - F) / (kop - F) - 1) * 100;
-    const sc = since(t), L = lev(t); return L > 1 && sc != null ? sc * L : null;
+    const p = t.status === "Stängd" ? num(t.salj_kurs) : price(t), lots = t.lots || [t];
+    let inv = 0, val = 0;
+    for (const l of lots) { const g = lotGrowth(l, p), w = (num(l.antal) || 1) * (num(l.cert_kop) || num(l.kop) || 1); if (g == null) return null; inv += w; val += w * g; }
+    return inv ? (val / inv - 1) * 100 : null;
   }
   const levNow = t => { const F = finOf(t), p = price(t); return F != null && p != null && p > F ? p / (p - F) : lev(t); };
   // Nästa motstånd (bara hans motståndsnivåer) över en kurs
@@ -168,7 +177,18 @@
     return sells.map(s => ({ s, v: { cls: "b-sell", label: "Säljsignal", text: open().some(t => sameStock(t, s)) ? "Du äger aktien" : "Du äger inte aktien", rank: -1, hot: open().some(t => sameStock(t, s)) } }))
       .concat(buys.map(s => ({ s, v: buyVerdict(s) })).sort((a, b) => a.v.rank - b.v.rank || ts(b.s.skapad) - ts(a.s.skapad)));
   }
-  function posList() { return open().map(t => ({ t, v: posVerdict(t) })).sort((a, b) => a.v.rank - b.v.rank || ts(b.t.skapad) - ts(a.t.skapad)); }
+  const gkey = t => t.signal_id || (t.aktie + "|" + (t.ticker || ""));
+  const lotsOf = t => open().filter(x => gkey(x) === gkey(t)).sort((a, b) => ts(a.skapad) - ts(b.skapad));
+  function merge(lots) {
+    if (lots.length === 1) return lots[0];
+    const w = l => (num(l.antal) || 1) * (num(l.cert_kop) || num(l.kop) || 1), W = lots.reduce((a, l) => a + w(l), 0);
+    const last = lots[lots.length - 1];
+    return Object.assign({}, last, { id: lots[0].id, lots, skapad: lots[0].skapad, kop: lots.reduce((a, l) => a + num(l.kop) * w(l), 0) / W, antal: lots.reduce((a, l) => a + (num(l.antal) || 0), 0) || null });
+  }
+  function posList() {
+    const g = {}; open().forEach(t => (g[gkey(t)] = g[gkey(t)] || []).push(t));
+    return Object.values(g).map(ls => merge(ls.sort((a, b) => ts(a.skapad) - ts(b.skapad)))).map(t => ({ t, v: posVerdict(t) })).sort((a, b) => a.v.rank - b.v.rank || ts(b.t.skapad) - ts(a.t.skapad));
+  }
 
   // ---------- Rendering ----------
   function render(quiet) {
@@ -295,7 +315,8 @@
     } else if (inline && inline.key === key && inline.kind === "del") {
       h += '<div class="btns"><button class="btn ghost" type="button" data-a="cancel">Behåll</button><button class="btn danger" type="button" data-a="del" data-k="' + esc(key) + '">Ja, ta bort</button></div>';
     } else {
-      h += '<div class="btns"><button class="btn primary wide" type="button" data-a="askSell" data-k="' + esc(key) + '">Jag sålde</button>' +
+      if (t.lots) h += '<div class="lots">' + t.lots.map((l, i) => '<div class="lot"><span>Köp ' + (i + 1) + " · " + date(l.skapad) + (l.cert_namn ? " · " + esc(l.cert_namn) : "") + "</span><b>" + (num(l.antal) ? fmt(num(l.antal)) + " st · " : "") + fmt(num(l.kop)) + "</b></div>").join("") + "</div>";
+      h += '<div class="btns"><button class="btn wide" type="button" data-a="refill" data-k="' + esc(key) + '">＋ Fyll på</button><button class="btn primary wide" type="button" data-a="askSell" data-k="' + esc(key) + '">Jag sålde</button>' +
         (t.ticker ? '<a class="btn" href="' + tvUrl(t.ticker) + '">TradingView ↗</a>' : "") +
         '<button class="btn ghost' + (t.ticker ? "" : " wide") + '" type="button" data-a="askDel" data-k="' + esc(key) + '">Ta bort</button></div>';
     }
@@ -334,7 +355,7 @@
   // ---------- Händelser ----------
   document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { view = b.dataset.f; openKey = null; inline = null; render(); window.scrollTo({ top: 0 }); }));
 
-  const find = key => key.startsWith("s:") ? signals.find(s => "s:" + s.id === key) : trades.find(t => "t:" + t.id === key);
+  const find = key => { if (key.startsWith("s:")) return signals.find(s => "s:" + s.id === key); const t = trades.find(t => "t:" + t.id === key); return t && t.status !== "Stängd" ? merge(lotsOf(t)) : t; };
   $("#list").addEventListener("click", async e => {
     const b = e.target.closest("button[data-a]"); if (!b) return;
     const a = b.dataset.a, key = b.dataset.k, x = key ? find(key) : null;
@@ -348,53 +369,109 @@
     }
     if (a === "buy" && x) return openBuy(x);
     if (!x) return;
+    if (a === "refill") return openBuy(signals.find(sg => sg.id === x.signal_id) || null, x);
     b.disabled = true; let r = { error: null };
     if (a === "dismiss") r = await sb.from("dismissed").insert({ signal_id: x.id });
-    if (a === "sell") { const v = num($("#s-px").value); r = await sb.from("trades").update({ status: "Stängd", salj_kurs: v, kurs: v, stangd: new Date().toISOString() }).eq("id", x.id); if (!r.error) view = "his"; }
-    if (a === "del") r = await sb.from("trades").delete().eq("id", x.id);
+    if (a === "sell") { const v = num($("#s-px").value); r = await sb.from("trades").update({ status: "Stängd", salj_kurs: v, kurs: v, stangd: new Date().toISOString() }).in("id", (x.lots || [x]).map(l => l.id)); if (!r.error) view = "his"; }
+    if (a === "del") r = await sb.from("trades").delete().in("id", (x.lots || [x]).map(l => l.id));
     if (r.error) { b.disabled = false; b.textContent = "Försök igen"; return; }
     inline = null; openKey = null; load();
   });
 
   // Jag köpte / egen aktie
   const buySheet = $("#buySheet"), buyForm = $("#buyForm");
-  function openBuy(s) {
-    buyFor = s; buyForm.reset(); $("#buyStatus").textContent = "";
-    $("#manualFields").hidden = !!s;
-    $("#buyTitle").textContent = s ? "Jag köpte " + s.aktie : "Lägg till egen aktie";
-    const p = s ? price(s) : null;
-    $("#b-kop").value = p != null ? p.toFixed(2) : (s && s.kop != null ? s.kop : "");
-    $("#certFields").hidden = $("#b-instr").value === "Aktie";
-    $("#b-ko").placeholder = s && s.knockout_max != null ? "under " + fmt(num(s.knockout_max)) : "";
-    $("#buyHint").textContent = s && s.knockout_max != null ? "Köper du Mini L: välj ett certifikat vars stopnivå ligger under " + fmt(num(s.knockout_max)) + ". Den står på Avanza och anges i aktiens pris." : "Certifikatets stopnivå står på Avanza och anges i aktiens pris.";
+  let buyPos = null;
+  function openBuy(s, pos) {
+    buyFor = s; buyPos = pos || null; buyForm.reset(); $("#buyStatus").textContent = ""; $("#impLbl").textContent = "📷 Läs in skärmbild från Avanza";
+    const name = s ? s.aktie : pos ? pos.aktie : null;
+    $("#manualFields").hidden = !!(s || pos);
+    $("#buyTitle").textContent = pos ? "Fyll på " + name : s ? "Jag köpte " + name : "Lägg till köp";
+    const src = s || pos, p = src ? price(src) : null;
+    $("#b-kop").value = p != null ? p.toFixed(2) : "";
+    if (pos && pos.instrument) $("#b-instr").value = pos.instrument;
+    syncInstr();
+    const kmax = s && s.knockout_max != null ? num(s.knockout_max) : null;
+    $("#b-ko").placeholder = kmax != null ? "under " + fmt(kmax) : "från Avanza";
+    $("#buyHint").textContent = kmax != null ? "Köper du Mini L: välj ett certifikat med stop loss under " + fmt(kmax) + "." : "";
     buySheet.hidden = false; document.body.classList.add("locked");
-    setTimeout(() => (s ? $("#b-kop") : $("#b-aktie")).focus(), 50);
   }
-  $("#b-instr").addEventListener("change", () => { $("#certFields").hidden = $("#b-instr").value === "Aktie"; });
+  function syncInstr() { const aktie = $("#b-instr").value === "Aktie"; $("#certFields").hidden = aktie; $("#antalAktie").hidden = !aktie; }
+  $("#b-instr").addEventListener("change", syncInstr);
   // Har du certifikatets köpkurs och kurs nu räknar vi fram aktiens kurs när du köpte: S0 = F + (S − F) × köp/nu
-  function fillS0() {
-    const F = num($("#b-fin").value), ck = num($("#b-ck").value), cn = num($("#b-cn").value), S = buyFor ? price(buyFor) : null;
+  function curPrice() { const src = buyFor || buyPos || matchSig($("#b-aktie").value); return src ? price(src) : null; }
+  function fillS0(lev) {
+    const S = curPrice(), ck = num($("#b-ck").value), cn = num($("#b-cn").value);
+    let F = num($("#b-fin").value);
+    if (F == null && lev && S != null) F = S - S / lev; // från indikativ hävstång
     if (F != null && ck && cn && S != null && S > F) $("#b-kop").value = (F + (S - F) * ck / cn).toFixed(2);
+    return F;
   }
-  ["b-fin", "b-ck", "b-cn"].forEach(id => $("#" + id).addEventListener("input", fillS0));
-  const closeBuy = () => { buySheet.hidden = true; document.body.classList.remove("locked"); buyFor = null; };
+  ["b-fin", "b-ck", "b-cn"].forEach(id => $("#" + id).addEventListener("input", () => fillS0()));
+  const norm = x => String(x || "").toLowerCase().replace(/[^a-z0-9åäö]/g, "");
+  function matchSig(n) {
+    const k = norm(n); if (!k) return null;
+    return signals.find(sg => sg.typ !== "SÄLJ" && (norm(sg.aktie) === k || k.includes(norm(sg.aktie)) || norm(sg.aktie).includes(k))) || null;
+  }
+  // Skärmbild → Claude läser → formuläret fylls i
+  async function toJpeg(file) {
+    const img = await createImageBitmap(file), sc = Math.min(1, 1600 / Math.max(img.width, img.height));
+    const c = document.createElement("canvas"); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", 0.85).split(",")[1];
+  }
+  $("#b-img").addEventListener("change", async e => {
+    const files = Array.from(e.target.files || []).slice(0, 3); if (!files.length) return;
+    const st = $("#buyStatus"); $("#impLbl").textContent = "Läser bilden…"; st.textContent = "";
+    try {
+      const images = await Promise.all(files.map(toJpeg));
+      const { data: ses } = await sb.auth.getSession();
+      const res = await fetch(cfg.supabaseUrl + "/functions/v1/importera", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (ses.session ? ses.session.access_token : ""), apikey: cfg.supabaseAnonKey }, body: JSON.stringify({ images }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) throw new Error(j.error || "Kunde inte läsa bilden.");
+      const d = j.data || {};
+      // koppla till signal/innehav om det inte redan är valt
+      if (!buyFor && !buyPos) {
+        const sg = matchSig(d.underliggande), have = open().find(t => norm(t.aktie) === norm(d.underliggande) || (sg && t.signal_id === sg.id));
+        if (have) buyPos = merge(lotsOf(have));
+        if (sg) buyFor = sg;
+        if (buyFor || buyPos) { $("#manualFields").hidden = true; $("#buyTitle").textContent = (buyPos ? "Fyll på " : "Jag köpte ") + (buyFor || buyPos).aktie; }
+        else if (d.underliggande) $("#b-aktie").value = d.underliggande;
+      }
+      const typ = d.typ === "Aktie" ? "Aktie" : d.typ === "Turbo L" ? "Turbo L" : "Mini L";
+      $("#b-instr").value = typ; syncInstr();
+      const set = (id, v) => { if (v != null && v !== "") $("#" + id).value = v; };
+      set("b-fin", d.finansieringsniva); set("b-ko", d.stop_loss); set("b-ck", d.inkopskurs); set("b-cn", d.kurs);
+      set("b-antal", d.antal); set("b-antal2", d.antal); set("b-cnamn", d.namn);
+      if (typ === "Aktie") { set("b-kop", d.inkopskurs); }
+      else {
+        const F = fillS0(num(d.havstang));
+        if (F != null && num($("#b-fin").value) == null) $("#b-fin").value = F.toFixed(2);
+        if (!d.inkopskurs || !d.kurs) st.textContent = "Inköpskurs eller kurs syntes inte – fyll i dem så räknas aktiens kurs ut.";
+        else if (num($("#b-fin").value) == null) st.textContent = "Finansieringsnivån syntes inte. Ta en bild på certifikatets sida också, eller fyll i den.";
+      }
+      $("#impLbl").textContent = "✓ Inläst – kolla och tryck Spara";
+    } catch (err) { $("#impLbl").textContent = "📷 Läs in skärmbild från Avanza"; st.textContent = err.message; }
+    e.target.value = "";
+  });
+  const closeBuy = () => { buySheet.hidden = true; document.body.classList.remove("locked"); buyFor = null; buyPos = null; };
   $("#newBtn").addEventListener("click", () => openBuy(null));
   $("#buyCancel").addEventListener("click", closeBuy);
   buySheet.addEventListener("click", e => { if (e.target === buySheet) closeBuy(); });
   buyForm.addEventListener("submit", async e => {
     e.preventDefault();
-    const s = buyFor, g = id => $("#" + id).value.trim();
-    const kop = num(g("b-kop")), instr = g("b-instr"), ko = num(g("b-ko"));
-    const zz = s ? zone(s, price(s)) : null;
-    const rr = s && kop != null ? resAbove(s, kop) : [null, null];
-    const row = s ? { signal_id: s.id, aktie: s.aktie, ticker: s.ticker, valuta: s.valuta, stopp: zz ? zz.stopp : s.stopp, mal1: rr[0], mal2: rr[1], anteckning: s.skal }
-      : { aktie: g("b-aktie"), ticker: g("b-ticker").toUpperCase() || null, valuta: /^(OMX|STO)/i.test(g("b-ticker")) || !g("b-ticker").includes(":") ? "SEK" : "USD", stopp: num(g("b-stopp")), mal1: num(g("b-mal1")) };
+    const s = buyFor, pos = buyPos, g = id => $("#" + id).value.trim();
+    const kop = num(g("b-kop")), instr = g("b-instr"), ko = instr !== "Aktie" ? num(g("b-ko")) : null;
+    let row;
+    if (pos) row = { signal_id: pos.signal_id || null, aktie: pos.aktie, ticker: pos.ticker, valuta: pos.valuta, stopp: pos.stopp, mal1: pos.mal1, mal2: pos.mal2, anteckning: pos.anteckning };
+    else if (s) { const zz = zone(s, price(s) != null ? price(s) : kop), rr = kop != null ? resAbove(s, kop) : [null, null]; row = { signal_id: s.id, aktie: s.aktie, ticker: s.ticker, valuta: s.valuta, stopp: zz ? zz.stopp : s.stopp, mal1: rr[0], mal2: rr[1], anteckning: s.skal }; }
+    else row = { aktie: g("b-aktie"), ticker: g("b-ticker").toUpperCase() || null, valuta: /^(OMX|STO)/i.test(g("b-ticker")) || !g("b-ticker").includes(":") ? "SEK" : "USD", stopp: num(g("b-stopp")), mal1: num(g("b-mal1")) };
     if (!row.aktie) { $("#buyStatus").textContent = "Fyll i aktiens namn."; return; }
-    if (kop == null) { $("#buyStatus").textContent = "Fyll i köpkursen."; return; }
-    if (instr !== "Aktie" && ko != null && num(row.stopp) != null && ko >= num(row.stopp)) { $("#buyStatus").textContent = "Certifikatets stopnivå bör ligga under stoppet " + fmt(num(row.stopp)) + ", annars slås du ut innan du hinner sälja."; return; }
+    if (kop == null) { $("#buyStatus").textContent = "Fyll i aktiens kurs när du köpte."; return; }
+    if (instr !== "Aktie" && ko != null && num(row.stopp) != null && ko >= num(row.stopp)) { $("#buyStatus").textContent = "Certifikatets stop loss bör ligga under stoppet " + fmt(num(row.stopp)) + ", annars slås du ut innan du hinner sälja."; return; }
     const F = instr !== "Aktie" ? num(g("b-fin")) : null;
     if (F != null && kop <= F) { $("#buyStatus").textContent = "Finansieringsnivån måste ligga under aktiens kurs."; return; }
-    Object.assign(row, { status: "Öppen", instrument: instr, hav: F != null ? +(kop / (kop - F)).toFixed(2) : null, insats: F, knockout: ko, kop, kurs: kop });
+    Object.assign(row, { status: "Öppen", instrument: instr, hav: F != null ? +(kop / (kop - F)).toFixed(2) : null, fin_niva: F, knockout: ko, kop, kurs: kop,
+      antal: num(instr === "Aktie" ? g("b-antal2") : g("b-antal")), cert_kop: instr !== "Aktie" ? num(g("b-ck")) : null, cert_namn: instr !== "Aktie" ? (g("b-cnamn") || null) : null });
     $("#buySave").disabled = true; $("#buyStatus").textContent = "Sparar…";
     const { error } = await sb.from("trades").insert(row);
     $("#buySave").disabled = false;
