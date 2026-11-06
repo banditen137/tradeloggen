@@ -146,6 +146,20 @@
   }
   const lev = t => t.instrument === "Aktie" ? 1 : (num(t.hav) || 1);
   function since(t) { const p = t.status === "Stängd" ? num(t.salj_kurs) : price(t), kop = num(t.kop); return p != null && kop ? (p - kop) / kop * 100 : null; }
+  // Certifikat: finansieringsnivån F sparas i kolumnen insats. Värdet följer (aktie − F), så
+  // utvecklingen blir (S − F) / (S0 − F) − 1 – exakt som på Avanza (bortsett från valuta och liten daglig ränta).
+  const finOf = t => t.instrument !== "Aktie" ? num(t.insats) : null;
+  function certSince(t) {
+    const F = finOf(t), kop = num(t.kop), p = t.status === "Stängd" ? num(t.salj_kurs) : price(t);
+    if (F != null && kop != null && p != null && kop > F) return ((p - F) / (kop - F) - 1) * 100;
+    const sc = since(t), L = lev(t); return L > 1 && sc != null ? sc * L : null;
+  }
+  const levNow = t => { const F = finOf(t), p = price(t); return F != null && p != null && p > F ? p / (p - F) : lev(t); };
+  // Nästa motstånd (bara hans motståndsnivåer) över en kurs
+  function resAbove(s, p) {
+    const r = [s.mal1, s.mal2].concat(s.motstand || []).map(num).filter(v => v != null && v > p).sort((a, b) => a - b);
+    return [r[0] != null ? r[0] : null, r[1] != null ? r[1] : null];
+  }
 
   // ---------- Listor ----------
   function sigList() {
@@ -251,13 +265,15 @@
   }
 
   function posCard(t, v) {
-    const key = "t:" + t.id, isOpen = openKey === key, p = price(t), kop = num(t.kop), sc = since(t), L = lev(t);
+    const key = "t:" + t.id, isOpen = openKey === key, p = price(t), kop = num(t.kop), sc = since(t), L = levNow(t), cs = t.instrument !== "Aktie" ? certSince(t) : null, exact = finOf(t) != null;
     const lo = num(t.stopp) != null ? num(t.stopp) : (t.instrument !== "Aktie" ? num(t.knockout) : null), hi = num(t.mal1);
     let h = '<article class="card' + (v.hot ? " hot" : "") + '" data-card="' + esc(key) + '"><button class="sum" type="button" data-a="toggle" data-k="' + esc(key) + '" aria-expanded="' + isOpen + '"><div data-sum style="display:flex;flex-direction:column;gap:12px">' +
       head(t, [t.instrument === "Aktie" ? "Aktie" : (t.instrument || "Mini L") + (L > 1 ? " " + fmt(L, 1) + "x" : ""), "köpt " + fmt(kop), dayCount(t.skapad) != null ? dayCount(t.skapad) + " d" : ""].filter(Boolean).join(" · ")) +
-      '<div class="big"><b class="' + tone(sc) + '">' + pct(sc) + "</b><span>sedan köp" + (L > 1 && sc != null ? " · certifikat ≈ " + pct(sc * L) : "") + "</span></div>" +
+      (cs != null
+        ? '<div class="big"><b class="' + tone(cs) + '">' + pct(cs) + "</b><span>certifikatet" + (exact ? "" : " ≈") + " · aktien " + pct(sc) + "</span></div>"
+        : '<div class="big"><b class="' + tone(sc) + '">' + pct(sc) + "</b><span>sedan köp</span></div>") +
       '<div class="verdict"><span class="badge ' + v.cls + '">' + v.label + '</span><span class="why-short">' + esc(v.text) + "</span></div>" +
-      track(lo, hi, kop, p, "Stopp", "Mål") + "</div></button>";
+      track(lo, hi, kop, p, "Stopp", "Motstånd") + "</div></button>";
     if (!isOpen) return h + "</article>";
 
     h += '<div class="detail">';
@@ -267,9 +283,10 @@
       fact("Köpt", fmt(kop) + " · " + date(t.skapad)) +
       fact("Kurs nu", p != null ? fmt(p, 2) + " " + (t.valuta || "") : "–") +
       fact("Sedan köp, aktien", pct(sc)) +
-      (L > 1 ? fact("Sedan köp, certifikat ≈", pct(sc != null ? sc * L : null)) : "") +
-      fact("Till mål 1", p != null && num(t.mal1) ? pct((num(t.mal1) - p) / p * 100) + " · " + fmt(num(t.mal1)) : "–") +
-      (num(t.mal2) ? fact("Till mål 2", p != null ? pct((num(t.mal2) - p) / p * 100) + " · " + fmt(num(t.mal2)) : "–") : "") +
+      (cs != null ? fact("Sedan köp, certifikat" + (exact ? "" : " ≈"), pct(cs)) : "") +
+      (finOf(t) != null ? fact("Finansieringsnivå · hävstång nu", fmt(finOf(t)) + " · " + fmt(L, 1) + "x") : "") +
+      fact("Till motstånd 1", p != null && num(t.mal1) ? pct((num(t.mal1) - p) / p * 100) + " · " + fmt(num(t.mal1)) : "–") +
+      (num(t.mal2) ? fact("Till motstånd 2", p != null ? pct((num(t.mal2) - p) / p * 100) + " · " + fmt(num(t.mal2)) : "–") : "") +
       fact("Till stopp", p != null && num(t.stopp) ? pct((num(t.stopp) - p) / p * 100) + " · " + fmt(num(t.stopp)) : "–") +
       (t.instrument !== "Aktie" && num(t.knockout) ? fact("Till knock-out", p != null ? pct((num(t.knockout) - p) / p * 100) + " · " + fmt(num(t.knockout)) : "–") : "") + "</div>";
     if (inline && inline.key === key && inline.kind === "sell") {
@@ -347,11 +364,19 @@
     $("#buyTitle").textContent = s ? "Jag köpte " + s.aktie : "Lägg till egen aktie";
     const p = s ? price(s) : null;
     $("#b-kop").value = p != null ? p.toFixed(2) : (s && s.kop != null ? s.kop : "");
+    $("#certFields").hidden = $("#b-instr").value === "Aktie";
     $("#b-ko").placeholder = s && s.knockout_max != null ? "under " + fmt(num(s.knockout_max)) : "";
     $("#buyHint").textContent = s && s.knockout_max != null ? "Köper du Mini L: välj ett certifikat vars stopnivå ligger under " + fmt(num(s.knockout_max)) + ". Den står på Avanza och anges i aktiens pris." : "Certifikatets stopnivå står på Avanza och anges i aktiens pris.";
     buySheet.hidden = false; document.body.classList.add("locked");
     setTimeout(() => (s ? $("#b-kop") : $("#b-aktie")).focus(), 50);
   }
+  $("#b-instr").addEventListener("change", () => { $("#certFields").hidden = $("#b-instr").value === "Aktie"; });
+  // Har du certifikatets köpkurs och kurs nu räknar vi fram aktiens kurs när du köpte: S0 = F + (S − F) × köp/nu
+  function fillS0() {
+    const F = num($("#b-fin").value), ck = num($("#b-ck").value), cn = num($("#b-cn").value), S = buyFor ? price(buyFor) : null;
+    if (F != null && ck && cn && S != null && S > F) $("#b-kop").value = (F + (S - F) * ck / cn).toFixed(2);
+  }
+  ["b-fin", "b-ck", "b-cn"].forEach(id => $("#" + id).addEventListener("input", fillS0));
   const closeBuy = () => { buySheet.hidden = true; document.body.classList.remove("locked"); buyFor = null; };
   $("#newBtn").addEventListener("click", () => openBuy(null));
   $("#buyCancel").addEventListener("click", closeBuy);
@@ -361,12 +386,15 @@
     const s = buyFor, g = id => $("#" + id).value.trim();
     const kop = num(g("b-kop")), instr = g("b-instr"), ko = num(g("b-ko"));
     const zz = s ? zone(s, price(s)) : null;
-    const row = s ? { signal_id: s.id, aktie: s.aktie, ticker: s.ticker, valuta: s.valuta, stopp: zz ? zz.stopp : s.stopp, mal1: zz ? zz.next : s.mal1, mal2: zz ? zz.next2 : s.mal2, anteckning: s.skal }
+    const rr = s && kop != null ? resAbove(s, kop) : [null, null];
+    const row = s ? { signal_id: s.id, aktie: s.aktie, ticker: s.ticker, valuta: s.valuta, stopp: zz ? zz.stopp : s.stopp, mal1: rr[0], mal2: rr[1], anteckning: s.skal }
       : { aktie: g("b-aktie"), ticker: g("b-ticker").toUpperCase() || null, valuta: /^(OMX|STO)/i.test(g("b-ticker")) || !g("b-ticker").includes(":") ? "SEK" : "USD", stopp: num(g("b-stopp")), mal1: num(g("b-mal1")) };
     if (!row.aktie) { $("#buyStatus").textContent = "Fyll i aktiens namn."; return; }
     if (kop == null) { $("#buyStatus").textContent = "Fyll i köpkursen."; return; }
     if (instr !== "Aktie" && ko != null && num(row.stopp) != null && ko >= num(row.stopp)) { $("#buyStatus").textContent = "Certifikatets stopnivå bör ligga under stoppet " + fmt(num(row.stopp)) + ", annars slås du ut innan du hinner sälja."; return; }
-    Object.assign(row, { status: "Öppen", instrument: instr, hav: num(g("b-lev")), knockout: ko, kop, kurs: kop });
+    const F = instr !== "Aktie" ? num(g("b-fin")) : null;
+    if (F != null && kop <= F) { $("#buyStatus").textContent = "Finansieringsnivån måste ligga under aktiens kurs."; return; }
+    Object.assign(row, { status: "Öppen", instrument: instr, hav: F != null ? +(kop / (kop - F)).toFixed(2) : null, insats: F, knockout: ko, kop, kurs: kop });
     $("#buySave").disabled = true; $("#buyStatus").textContent = "Sparar…";
     const { error } = await sb.from("trades").insert(row);
     $("#buySave").disabled = false;

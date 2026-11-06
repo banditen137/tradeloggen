@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="/styles.css?v=1793881259">
+<link rel="stylesheet" href="/styles.css?v=1793953957">
 </head>
 <body class="auth">
 
@@ -78,10 +78,16 @@
         <label>Mål<input id="b-mal1" inputmode="decimal"></label>
       </div>
       <div class="grid">
-        <label>Köpkurs (aktien)<input id="b-kop" inputmode="decimal" required></label>
-        <label>Instrument<select id="b-instr"><option>Aktie</option><option>Mini L</option><option>Turbo L</option></select></label>
-        <label>Hävstång (x)<input id="b-lev" inputmode="decimal" placeholder="1"></label>
-        <label>Cert. stopnivå<input id="b-ko" inputmode="decimal"></label>
+        <label class="full">Instrument<select id="b-instr"><option>Mini L</option><option>Aktie</option><option>Turbo L</option></select></label>
+      </div>
+      <div class="grid" id="certFields">
+        <label>Finansieringsnivå<input id="b-fin" inputmode="decimal" placeholder="från Avanza"></label>
+        <label>Stop loss<input id="b-ko" inputmode="decimal" placeholder="från Avanza"></label>
+        <label>Cert. köpkurs (kr)<input id="b-ck" inputmode="decimal" placeholder="Inköpskurs"></label>
+        <label>Cert. kurs nu (kr)<input id="b-cn" inputmode="decimal" placeholder="Kurs"></label>
+      </div>
+      <div class="grid">
+        <label class="full">Aktiens kurs när du köpte<input id="b-kop" inputmode="decimal" required></label>
       </div>
       <p class="hint" id="buyHint">Certifikatets stopnivå står på Avanza och anges i aktiens pris.</p>
       <p class="status" id="buyStatus" role="status"></p>
@@ -124,7 +130,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="/config.js?v=1793881259"></script>
-<script src="/app.js?v=1793881259"></script>
+<script src="/config.js?v=1793953957"></script>
+<script src="/app.js?v=1793953957"></script>
 </body>
 </html>
