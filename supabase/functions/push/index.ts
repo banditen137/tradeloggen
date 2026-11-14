@@ -37,6 +37,7 @@ function ySym(tv?: string | null) {
   if (/OSL|OSE/.test(ex)) return s.replace(/_/g, "-") + ".OL";
   if (/OMX|STO|NGM|FN/.test(ex)) return s.replace(/_/g, "-") + ".ST";
   if (/XETR|FWB/.test(ex)) return s + ".DE";
+  if (/EURONEXT|EPA/.test(ex)) return s + ".PA";
   return s.replace(/\./g, "-");
 }
 type Q = { price: number; sma50: number | null };

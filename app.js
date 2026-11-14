@@ -72,6 +72,7 @@
     if (/OSL|OSE/.test(ex)) return s.replace(/_/g, "-") + ".OL";
     if (/OMX|STO|NGM|FN/.test(ex)) return s.replace(/_/g, "-") + ".ST";
     if (/XETR|FWB/.test(ex)) return s + ".DE";
+    if (/EURONEXT|EPA/.test(ex)) return s + ".PA";
     return s.replace(/\./g, "-");
   }
   const q = t => { const y = ySym(t.ticker); return y ? quotes[y] : null; };
